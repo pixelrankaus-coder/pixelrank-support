@@ -11,7 +11,7 @@ export default async function BlazePage() {
     redirect("/login");
   }
 
-  const [companies, agents] = await Promise.all([
+  const [companiesRaw, agents] = await Promise.all([
     prisma.company.findMany({
       orderBy: { name: "asc" },
       include: {
@@ -25,6 +25,12 @@ export default async function BlazePage() {
       orderBy: { name: "asc" },
     }),
   ]);
+
+  // Serialize dates to strings for client component
+  const companies = companiesRaw.map((company) => ({
+    ...company,
+    blazeStartDate: company.blazeStartDate?.toISOString() || null,
+  }));
 
   return (
     <BlazeClient
