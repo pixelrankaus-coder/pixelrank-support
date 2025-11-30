@@ -27,14 +27,34 @@ async function getAISettings(): Promise<AISettings | null> {
     where: { id: "default" },
   });
 
-  if (!settings || !settings.isEnabled || !settings.apiKey) {
+  if (!settings || !settings.isEnabled) {
+    return null;
+  }
+
+  // Get the API key based on active provider
+  let apiKey: string | null = null;
+  let model: string | null = null;
+  const provider = settings.activeProvider;
+
+  if (provider === "anthropic") {
+    apiKey = settings.anthropicApiKey;
+    model = settings.anthropicModel;
+  } else if (provider === "openai") {
+    apiKey = settings.openaiApiKey;
+    model = settings.openaiModel;
+  } else if (provider === "openrouter") {
+    apiKey = settings.openrouterApiKey;
+    model = settings.openrouterModel;
+  }
+
+  if (!apiKey) {
     return null;
   }
 
   return {
-    provider: settings.provider,
-    apiKey: decryptApiKey(settings.apiKey),
-    model: settings.model,
+    provider,
+    apiKey: decryptApiKey(apiKey),
+    model,
     isEnabled: settings.isEnabled,
   };
 }
