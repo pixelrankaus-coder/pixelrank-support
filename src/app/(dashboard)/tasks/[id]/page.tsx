@@ -80,6 +80,8 @@ export default async function TaskDetailPage({
     subtasks: task.subtasks.map((subtask) => ({
       ...subtask,
       createdAt: subtask.createdAt.toISOString(),
+      updatedAt: subtask.updatedAt.toISOString(),
+      completedAt: subtask.completedAt?.toISOString() || null,
     })),
     timeEntries: task.timeEntries.map((entry) => ({
       ...entry,
