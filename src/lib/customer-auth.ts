@@ -10,6 +10,7 @@ export interface CustomerSession {
   id: string;
   email: string;
   name: string | null;
+  [key: string]: unknown;
 }
 
 export async function encryptCustomerSession(

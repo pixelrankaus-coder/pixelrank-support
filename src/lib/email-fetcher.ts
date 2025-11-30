@@ -1,5 +1,5 @@
 import Imap from "imap";
-import { simpleParser, ParsedMail } from "mailparser";
+import { simpleParser, ParsedMail, Source } from "mailparser";
 import { prisma } from "./db";
 import { runTicketCreatedAutomations, runTicketUpdatedAutomations } from "./automation-engine";
 
@@ -122,7 +122,7 @@ async function fetchEmailsFromChannel(channel: EmailChannelConfig): Promise<{
 
           fetch.on("message", (msg) => {
             msg.on("body", (stream) => {
-              simpleParser(stream, (parseErr, parsed) => {
+              simpleParser(stream as unknown as Source, (parseErr, parsed) => {
                 if (parseErr) {
                   errors.push(`Parse error: ${parseErr.message}`);
                 } else {
