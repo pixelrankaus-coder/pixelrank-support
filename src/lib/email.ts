@@ -1,6 +1,58 @@
 import nodemailer from "nodemailer";
 import { prisma } from "./db";
 
+// Mailgun HTTP API sender - bypasses SMTP port blocking
+async function sendViaMailgunApi(
+  to: string,
+  from: string,
+  subject: string,
+  html: string
+): Promise<{ success: boolean; error?: string }> {
+  const apiKey = process.env.MAILGUN_API_KEY;
+  const domain = process.env.MAILGUN_DOMAIN;
+
+  if (!apiKey || !domain) {
+    return { success: false, error: "Mailgun not configured" };
+  }
+
+  // Use EU endpoint if MAILGUN_EU is set, otherwise use US
+  const baseUrl = process.env.MAILGUN_EU === "true"
+    ? "https://api.eu.mailgun.net/v3"
+    : "https://api.mailgun.net/v3";
+
+  const formData = new FormData();
+  formData.append("from", from);
+  formData.append("to", to);
+  formData.append("subject", subject);
+  formData.append("html", html);
+
+  try {
+    const response = await fetch(`${baseUrl}/${domain}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`api:${apiKey}`).toString("base64")}`,
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Mailgun API] Error response:", errorText);
+      return { success: false, error: `Mailgun API error: ${response.status} - ${errorText}` };
+    }
+
+    const result = await response.json();
+    console.log("[Mailgun API] Email sent successfully:", result);
+    return { success: true };
+  } catch (error) {
+    console.error("[Mailgun API] Request failed:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Mailgun API request failed"
+    };
+  }
+}
+
 interface EmailData {
   ticketNumber?: number;
   subject?: string;
@@ -130,6 +182,8 @@ function getFromAddress(channel?: { name: string; email: string } | null): strin
 
 /**
  * Send an email using a template
+ * Prefers Mailgun HTTP API (to bypass SMTP port blocking on cloud hosts)
+ * Falls back to SMTP if Mailgun is not configured
  */
 export async function sendTemplatedEmail(
   templateSlug: string,
@@ -148,13 +202,33 @@ export async function sendTemplatedEmail(
     }
 
     const channel = await getDefaultEmailChannel();
-    const transporter = createTransporter(channel);
-
+    const from = getFromAddress(channel);
     const subject = replaceTemplateVariables(template.subject, data);
     const html = replaceTemplateVariables(template.body, data);
 
+    // Try Mailgun HTTP API first (bypasses SMTP port blocking)
+    if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
+      console.log(`[Email] Sending templated email via Mailgun HTTP API to ${to}`);
+      const result = await sendViaMailgunApi(to, from, subject, html);
+
+      if (result.success) {
+        await prisma.emailLog.create({
+          data: { ticketId, to, subject, status: "SENT" },
+        });
+        console.log(`Templated email sent successfully via Mailgun API to ${to} using template "${templateSlug}"`);
+        return { success: true };
+      }
+
+      // Log the error but continue to try SMTP as fallback
+      console.warn(`[Email] Mailgun API failed: ${result.error}, trying SMTP fallback...`);
+    }
+
+    // Fall back to SMTP
+    console.log(`[Email] Sending templated email via SMTP to ${to}`);
+    const transporter = createTransporter(channel);
+
     await transporter.sendMail({
-      from: getFromAddress(channel),
+      from,
       to,
       subject,
       html,
@@ -164,10 +238,10 @@ export async function sendTemplatedEmail(
       data: { ticketId, to, subject, status: "SENT" },
     });
 
-    console.log(`Email sent successfully to ${to} using template "${templateSlug}"`);
+    console.log(`Templated email sent successfully via SMTP to ${to} using template "${templateSlug}"`);
     return { success: true };
   } catch (error) {
-    console.error("Failed to send email:", error);
+    console.error("Failed to send templated email:", error);
 
     await prisma.emailLog.create({
       data: {
@@ -188,6 +262,8 @@ export async function sendTemplatedEmail(
 
 /**
  * Send a raw email (no template)
+ * Prefers Mailgun HTTP API (to bypass SMTP port blocking on cloud hosts)
+ * Falls back to SMTP if Mailgun is not configured
  */
 export async function sendEmail(
   to: string,
@@ -197,10 +273,31 @@ export async function sendEmail(
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const channel = await getDefaultEmailChannel();
+    const from = getFromAddress(channel);
+
+    // Try Mailgun HTTP API first (bypasses SMTP port blocking)
+    if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
+      console.log(`[Email] Sending via Mailgun HTTP API to ${to}`);
+      const result = await sendViaMailgunApi(to, from, subject, html);
+
+      if (result.success) {
+        await prisma.emailLog.create({
+          data: { ticketId, to, subject, status: "SENT" },
+        });
+        console.log(`Email sent successfully via Mailgun API to ${to}`);
+        return { success: true };
+      }
+
+      // Log the error but continue to try SMTP as fallback
+      console.warn(`[Email] Mailgun API failed: ${result.error}, trying SMTP fallback...`);
+    }
+
+    // Fall back to SMTP
+    console.log(`[Email] Sending via SMTP to ${to}`);
     const transporter = createTransporter(channel);
 
     await transporter.sendMail({
-      from: getFromAddress(channel),
+      from,
       to,
       subject,
       html,
@@ -210,7 +307,7 @@ export async function sendEmail(
       data: { ticketId, to, subject, status: "SENT" },
     });
 
-    console.log(`Email sent successfully to ${to}`);
+    console.log(`Email sent successfully via SMTP to ${to}`);
     return { success: true };
   } catch (error) {
     console.error("Failed to send email:", error);
