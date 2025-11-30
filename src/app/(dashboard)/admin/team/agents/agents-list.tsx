@@ -52,7 +52,7 @@ interface AgentsListProps {
 
 export function AgentsList({ initialAgents }: AgentsListProps) {
   const router = useRouter();
-  const [agents, setAgents] = useState(initialAgents);
+  const [agents] = useState(initialAgents);
   const [showModal, setShowModal] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
