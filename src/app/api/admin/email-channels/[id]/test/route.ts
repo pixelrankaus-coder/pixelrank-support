@@ -3,11 +3,50 @@ import { prisma } from "@/lib/db";
 import nodemailer from "nodemailer";
 import Imap from "imap";
 import { emailLogger } from "@/lib/email-activity-logger";
+import * as dns from "dns";
+import { promisify } from "util";
+
+const resolveMx = promisify(dns.resolveMx);
 
 // Helper to format duration in human readable format
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
+}
+
+// Helper to mask password for logging (show length and first/last char)
+function maskPassword(password: string | null): string {
+  if (!password) return "❌ NOT SET";
+  if (password.length < 3) return `⚠️ TOO SHORT (${password.length} chars)`;
+  if (password.trim() !== password) return `⚠️ HAS LEADING/TRAILING SPACES (${password.length} chars)`;
+  return `✓ Set (${password.length} chars: ${password[0]}${"*".repeat(Math.min(password.length - 2, 10))}${password[password.length - 1]})`;
+}
+
+// Helper to validate credentials before testing
+function validateCredentials(user: string | null, password: string | null, context: "smtp" | "imap"): string[] {
+  const warnings: string[] = [];
+
+  if (!user) {
+    warnings.push(`${context.toUpperCase()} username is not set`);
+  } else if (!user.includes("@") && context === "imap") {
+    warnings.push(`${context.toUpperCase()} username "${user}" doesn't look like an email - some providers require full email address`);
+  }
+
+  if (!password) {
+    warnings.push(`${context.toUpperCase()} password is not set`);
+  } else {
+    if (password.length < 8) {
+      warnings.push(`${context.toUpperCase()} password seems short (${password.length} chars) - app passwords are usually 16+ chars`);
+    }
+    if (password.trim() !== password) {
+      warnings.push(`${context.toUpperCase()} password has leading or trailing whitespace - this often causes auth failures`);
+    }
+    if (password.includes(" ") && password.length < 20) {
+      warnings.push(`${context.toUpperCase()} password contains spaces - make sure this is intentional`);
+    }
+  }
+
+  return warnings;
 }
 
 // Helper to get human-readable error explanation
@@ -24,8 +63,8 @@ function getHumanReadableError(error: string, context: "smtp" | "imap"): string 
     return `Connection refused. The ${context.toUpperCase()} server is not accepting connections on this port. Verify the host and port are correct.`;
   }
 
-  if (lowerError.includes("auth") || lowerError.includes("login") || lowerError.includes("credential")) {
-    return "Authentication failed. Check your username and password. Make sure you're using an app-specific password if 2FA is enabled.";
+  if (lowerError.includes("auth") || lowerError.includes("login") || lowerError.includes("credential") || lowerError.includes("invalid")) {
+    return "Authentication failed. Check your username and password. Make sure you're using an app-specific password if 2FA is enabled. For Gmail/Google Workspace, you need to enable 'Less secure apps' or use an App Password.";
   }
 
   if (lowerError.includes("certificate") || lowerError.includes("ssl") || lowerError.includes("tls")) {
@@ -36,20 +75,46 @@ function getHumanReadableError(error: string, context: "smtp" | "imap"): string 
     return `Cannot find server. The hostname might be incorrect or DNS is not resolving. Verify the ${context.toUpperCase()} host address.`;
   }
 
+  if (lowerError.includes("self signed") || lowerError.includes("self-signed")) {
+    return "Server is using a self-signed certificate. This is handled automatically, but if issues persist, check your SSL settings.";
+  }
+
   return error;
 }
 
-// Test IMAP connection with a promise wrapper
-function testImapConnection(config: {
-  user: string;
-  password: string;
-  host: string;
-  port: number;
-  tls: boolean;
-}): Promise<{ success: boolean; message: string; duration: number }> {
-  return new Promise((resolve) => {
-    const startTime = Date.now();
+// Test IMAP connection with detailed step-by-step logging
+async function testImapConnection(
+  config: {
+    user: string;
+    password: string;
+    host: string;
+    port: number;
+    tls: boolean;
+  },
+  channelId: string,
+  channelName: string
+): Promise<{ success: boolean; message: string; duration: number }> {
+  const startTime = Date.now();
 
+  // Step 1: Validate credentials
+  const credWarnings = validateCredentials(config.user, config.password, "imap");
+  if (credWarnings.length > 0) {
+    for (const warning of credWarnings) {
+      await emailLogger.warn(`⚠️ ${warning}`, { channelId, channelName });
+    }
+  }
+
+  // Log credential info (masked)
+  await emailLogger.connection(`🔐 IMAP Credentials: user="${config.user}", password=${maskPassword(config.password)}`, {
+    channelId,
+    channelName,
+    level: "DEBUG",
+  });
+
+  // Step 2: DNS lookup
+  await emailLogger.connection(`🔍 Step 1: Resolving hostname ${config.host}...`, { channelId, channelName });
+
+  return new Promise((resolve) => {
     const imap = new Imap({
       user: config.user,
       password: config.password,
@@ -57,9 +122,19 @@ function testImapConnection(config: {
       port: config.port,
       tls: config.tls,
       tlsOptions: { rejectUnauthorized: false },
-      connTimeout: 30000, // 30 second timeout
+      connTimeout: 30000,
       authTimeout: 30000,
+      debug: (info: string) => {
+        // Log IMAP debug info for troubleshooting
+        if (info.includes("LOGIN") || info.includes("AUTHENTICATE")) {
+          emailLogger.connection(`🔑 Step 3: Authenticating...`, { channelId, channelName, level: "DEBUG" });
+        } else if (info.includes("OK") && info.includes("authenticated")) {
+          emailLogger.connection(`✅ Authentication successful!`, { channelId, channelName, level: "DEBUG" });
+        }
+      },
     });
+
+    let connectionEstablished = false;
 
     const cleanup = () => {
       try {
@@ -71,26 +146,199 @@ function testImapConnection(config: {
 
     imap.once("ready", () => {
       const duration = Date.now() - startTime;
+      connectionEstablished = true;
+
+      emailLogger.connection(`✅ Step 4: IMAP ready! Connection fully established.`, {
+        channelId,
+        channelName,
+        duration,
+      });
+
       cleanup();
       resolve({
         success: true,
-        message: `IMAP connection successful! Connected in ${formatDuration(duration)}.`,
+        message: `IMAP connection successful! Connected and authenticated in ${formatDuration(duration)}.`,
         duration,
       });
     });
 
     imap.once("error", (err: Error) => {
       const duration = Date.now() - startTime;
+      const errorMsg = err.message;
+
+      // Determine which step failed
+      let step = "unknown step";
+      if (duration < 1000 && !connectionEstablished) {
+        step = "DNS/initial connection";
+      } else if (errorMsg.toLowerCase().includes("auth") || errorMsg.toLowerCase().includes("login") || errorMsg.toLowerCase().includes("invalid")) {
+        step = "authentication";
+      } else if (duration > 25000) {
+        step = "connection (timeout)";
+      } else {
+        step = "connection/handshake";
+      }
+
+      emailLogger.error(`❌ Failed at ${step}: ${errorMsg}`, {
+        channelId,
+        channelName,
+        duration,
+        details: { step, originalError: errorMsg },
+      });
+
       cleanup();
       resolve({
         success: false,
-        message: getHumanReadableError(err.message, "imap"),
+        message: getHumanReadableError(errorMsg, "imap"),
         duration,
       });
     });
 
+    // Log connection attempt
+    emailLogger.connection(`🔌 Step 2: Connecting to ${config.host}:${config.port} (${config.tls ? "SSL/TLS" : "plain"})...`, {
+      channelId,
+      channelName,
+    });
+
     imap.connect();
   });
+}
+
+// Test SMTP connection with detailed step-by-step logging
+async function testSmtpConnection(
+  config: {
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string | null;
+    password: string | null;
+  },
+  channelId: string,
+  channelName: string
+): Promise<{ success: boolean; message: string; duration: number }> {
+  const startTime = Date.now();
+
+  // Step 1: Validate credentials
+  if (config.user && config.password) {
+    const credWarnings = validateCredentials(config.user, config.password, "smtp");
+    if (credWarnings.length > 0) {
+      for (const warning of credWarnings) {
+        await emailLogger.warn(`⚠️ ${warning}`, { channelId, channelName });
+      }
+    }
+
+    // Log credential info (masked)
+    await emailLogger.connection(`🔐 SMTP Credentials: user="${config.user}", password=${maskPassword(config.password)}`, {
+      channelId,
+      channelName,
+      level: "DEBUG",
+    });
+  } else {
+    await emailLogger.warn(`⚠️ SMTP authentication not configured - will attempt anonymous connection`, {
+      channelId,
+      channelName,
+    });
+  }
+
+  // Step 2: Port validation
+  const expectedSecure = config.port === 465;
+  if (config.secure !== expectedSecure) {
+    const hint = config.port === 465
+      ? "Port 465 typically requires SSL/TLS to be enabled"
+      : config.port === 587
+        ? "Port 587 typically uses STARTTLS (SSL/TLS can be off, encryption happens after connection)"
+        : `Port ${config.port} is non-standard for SMTP`;
+    await emailLogger.warn(`⚠️ Port/SSL mismatch hint: ${hint}`, { channelId, channelName });
+  }
+
+  try {
+    // Step 3: DNS lookup
+    await emailLogger.connection(`🔍 Step 1: Resolving hostname ${config.host}...`, { channelId, channelName });
+
+    try {
+      const mxRecords = await resolveMx(config.host.replace(/^(smtp|mail)\./, ""));
+      if (mxRecords && mxRecords.length > 0) {
+        await emailLogger.connection(`✅ DNS resolved. MX records found for domain.`, {
+          channelId,
+          channelName,
+          level: "DEBUG",
+          details: { mxRecords: mxRecords.slice(0, 3).map(r => r.exchange) }
+        });
+      }
+    } catch {
+      // MX lookup failed, but that's OK - we're connecting directly to SMTP server
+      await emailLogger.connection(`ℹ️ No MX records (connecting directly to SMTP server)`, {
+        channelId,
+        channelName,
+        level: "DEBUG"
+      });
+    }
+
+    // Step 4: Create transporter and connect
+    await emailLogger.connection(`🔌 Step 2: Connecting to ${config.host}:${config.port} (${config.secure ? "SSL/TLS" : "STARTTLS"})...`, {
+      channelId,
+      channelName,
+    });
+
+    const transporter = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      connectionTimeout: 30000,
+      greetingTimeout: 30000,
+      auth: config.user && config.password
+        ? { user: config.user, pass: config.password }
+        : undefined,
+      logger: false,
+      debug: false,
+    });
+
+    // Step 5: Verify connection
+    await emailLogger.connection(`🔑 Step 3: Verifying connection and authentication...`, { channelId, channelName });
+
+    await transporter.verify();
+
+    const duration = Date.now() - startTime;
+
+    await emailLogger.connection(`✅ Step 4: SMTP ready! Server accepted connection.`, {
+      channelId,
+      channelName,
+      duration,
+    });
+
+    return {
+      success: true,
+      message: `SMTP connected and verified in ${formatDuration(duration)}. Ready to send emails.`,
+      duration,
+    };
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+    // Determine which step likely failed
+    let step = "unknown";
+    if (duration < 1000) {
+      step = "DNS/initial connection";
+    } else if (errorMessage.toLowerCase().includes("auth") || errorMessage.toLowerCase().includes("credentials") || errorMessage.toLowerCase().includes("invalid")) {
+      step = "authentication";
+    } else if (duration > 25000) {
+      step = "connection (timeout)";
+    } else {
+      step = "connection/handshake";
+    }
+
+    await emailLogger.error(`❌ SMTP failed at ${step}: ${errorMessage}`, {
+      channelId,
+      channelName,
+      duration,
+      details: { step, originalError: errorMessage },
+    });
+
+    return {
+      success: false,
+      message: getHumanReadableError(errorMessage, "smtp"),
+      duration,
+    };
+  }
 }
 
 // POST /api/admin/email-channels/[id]/test - Test email channel connection (SMTP + IMAP)
@@ -124,104 +372,114 @@ export async function POST(
     channelName = channel.name || channel.email;
     const results: { smtp?: { success: boolean; message: string }; imap?: { success: boolean; message: string } } = {};
 
+    await emailLogger.info(`🔍 ═══════════════════════════════════════════════════`, {
+      channelId: channel.id,
+      channelName,
+    });
     await emailLogger.info(`🔍 Starting connection test for "${channelName}"`, {
+      channelId: channel.id,
+      channelName,
+    });
+    await emailLogger.info(`🔍 ═══════════════════════════════════════════════════`, {
       channelId: channel.id,
       channelName,
     });
 
     // Test SMTP if configured
     if (channel.smtpHost && channel.smtpPort) {
-      await emailLogger.connection(`📤 Testing SMTP (outgoing mail) → ${channel.smtpHost}:${channel.smtpPort}...`, {
+      await emailLogger.info(`\n📤 ─── SMTP TEST (Outgoing Mail) ───`, {
+        channelId: channel.id,
+        channelName,
+      });
+      await emailLogger.connection(`📤 Server: ${channel.smtpHost}:${channel.smtpPort}`, {
         channelId: channel.id,
         channelName,
         details: {
           host: channel.smtpHost,
           port: channel.smtpPort,
           secure: channel.smtpSecure,
-          user: channel.smtpUser ? "configured" : "not set"
+          user: channel.smtpUser || "not set",
         },
       });
 
-      const smtpStart = Date.now();
-      try {
-        const transporter = nodemailer.createTransport({
+      const smtpResult = await testSmtpConnection(
+        {
           host: channel.smtpHost,
           port: channel.smtpPort,
           secure: channel.smtpSecure,
-          connectionTimeout: 30000,
-          auth: channel.smtpUser && channel.smtpPassword
-            ? { user: channel.smtpUser, pass: channel.smtpPassword }
-            : undefined,
-        });
+          user: channel.smtpUser,
+          password: channel.smtpPassword,
+        },
+        channel.id,
+        channelName
+      );
 
-        await transporter.verify();
-        const smtpDuration = Date.now() - smtpStart;
+      results.smtp = { success: smtpResult.success, message: smtpResult.message };
 
-        results.smtp = {
-          success: true,
-          message: `SMTP connected successfully in ${formatDuration(smtpDuration)}`
-        };
-
-        await emailLogger.connection(`✅ SMTP connection successful! Ready to send emails.`, {
+      if (smtpResult.success) {
+        await emailLogger.connection(`\n✅ SMTP TEST PASSED in ${formatDuration(smtpResult.duration)}`, {
           channelId: channel.id,
           channelName,
-          duration: smtpDuration,
+          duration: smtpResult.duration,
         });
-      } catch (error) {
-        const smtpDuration = Date.now() - smtpStart;
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
-
-        results.smtp = {
-          success: false,
-          message: getHumanReadableError(errorMessage, "smtp")
-        };
-
-        await emailLogger.error(`❌ SMTP connection failed: ${getHumanReadableError(errorMessage, "smtp")}`, {
+      } else {
+        await emailLogger.error(`\n❌ SMTP TEST FAILED after ${formatDuration(smtpResult.duration)}`, {
           channelId: channel.id,
           channelName,
-          duration: smtpDuration,
-          details: { originalError: errorMessage },
+          duration: smtpResult.duration,
         });
       }
     } else {
-      await emailLogger.warn("⚠️ SMTP not configured - skipping outgoing mail test", {
+      await emailLogger.warn("\n⚠️ SMTP not configured - skipping outgoing mail test", {
         channelId: channel.id,
         channelName,
+        details: {
+          smtpHost: channel.smtpHost || "not set",
+          smtpPort: channel.smtpPort || "not set",
+        },
       });
       results.smtp = { success: false, message: "SMTP not configured" };
     }
 
     // Test IMAP if configured
     if (channel.imapHost && channel.imapPort && channel.imapUser && channel.imapPassword) {
-      await emailLogger.connection(`📥 Testing IMAP (incoming mail) → ${channel.imapHost}:${channel.imapPort}...`, {
+      await emailLogger.info(`\n📥 ─── IMAP TEST (Incoming Mail) ───`, {
+        channelId: channel.id,
+        channelName,
+      });
+      await emailLogger.connection(`📥 Server: ${channel.imapHost}:${channel.imapPort}`, {
         channelId: channel.id,
         channelName,
         details: {
           host: channel.imapHost,
           port: channel.imapPort,
           secure: channel.imapSecure,
-          user: channel.imapUser
+          user: channel.imapUser,
         },
       });
 
-      const imapResult = await testImapConnection({
-        user: channel.imapUser,
-        password: channel.imapPassword,
-        host: channel.imapHost,
-        port: channel.imapPort,
-        tls: channel.imapSecure,
-      });
+      const imapResult = await testImapConnection(
+        {
+          user: channel.imapUser,
+          password: channel.imapPassword,
+          host: channel.imapHost,
+          port: channel.imapPort,
+          tls: channel.imapSecure,
+        },
+        channel.id,
+        channelName
+      );
 
       results.imap = { success: imapResult.success, message: imapResult.message };
 
       if (imapResult.success) {
-        await emailLogger.connection(`✅ IMAP connection successful! Ready to receive emails.`, {
+        await emailLogger.connection(`\n✅ IMAP TEST PASSED in ${formatDuration(imapResult.duration)}`, {
           channelId: channel.id,
           channelName,
           duration: imapResult.duration,
         });
       } else {
-        await emailLogger.error(`❌ IMAP connection failed: ${imapResult.message}`, {
+        await emailLogger.error(`\n❌ IMAP TEST FAILED after ${formatDuration(imapResult.duration)}`, {
           channelId: channel.id,
           channelName,
           duration: imapResult.duration,
@@ -229,7 +487,7 @@ export async function POST(
             host: channel.imapHost,
             port: channel.imapPort,
             suggestion: channel.imapPort === 993
-              ? "Port 993 is correct for IMAP SSL. Check if your email provider allows IMAP access and that you're using the correct credentials."
+              ? "Port 993 is correct for IMAP SSL. Check if your email provider allows IMAP access and that you're using an app-specific password."
               : channel.imapPort === 143
                 ? "Port 143 is for non-SSL IMAP. Try port 993 with SSL enabled if this doesn't work."
                 : `Port ${channel.imapPort} is unusual for IMAP. Standard ports are 993 (SSL) or 143 (non-SSL).`
@@ -237,7 +495,7 @@ export async function POST(
         });
       }
     } else {
-      await emailLogger.warn("⚠️ IMAP not configured - skipping incoming mail test", {
+      await emailLogger.warn("\n⚠️ IMAP not configured - skipping incoming mail test", {
         channelId: channel.id,
         channelName,
         details: {
@@ -254,20 +512,28 @@ export async function POST(
     const overallSuccess = (results.smtp?.success || !channel.smtpHost) && (results.imap?.success || !channel.imapHost);
 
     // Summary log
+    await emailLogger.info(`\n🔍 ═══════════════════════════════════════════════════`, {
+      channelId: channel.id,
+      channelName,
+    });
     await emailLogger.info(
       overallSuccess
-        ? `✅ Connection test completed successfully for "${channelName}" in ${formatDuration(totalDuration)}`
-        : `⚠️ Connection test completed with issues for "${channelName}" in ${formatDuration(totalDuration)}`,
+        ? `✅ TEST COMPLETE: All configured protocols working! (${formatDuration(totalDuration)})`
+        : `⚠️ TEST COMPLETE: Some issues detected (${formatDuration(totalDuration)})`,
       {
         channelId: channel.id,
         channelName,
         duration: totalDuration,
         details: {
-          smtp: results.smtp,
-          imap: results.imap,
+          smtp: results.smtp?.success ? "✓ PASSED" : results.smtp?.message || "not tested",
+          imap: results.imap?.success ? "✓ PASSED" : results.imap?.message || "not tested",
         },
       }
     );
+    await emailLogger.info(`🔍 ═══════════════════════════════════════════════════\n`, {
+      channelId: channel.id,
+      channelName,
+    });
 
     // Build response message
     const messages: string[] = [];
