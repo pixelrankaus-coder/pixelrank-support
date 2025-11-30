@@ -54,8 +54,8 @@ interface Task {
   description: string | null;
   status: string;
   priority: string;
-  dueDate: string | Date | null;
-  completedAt: string | Date | null;
+  dueDate: string | null;
+  completedAt: string | null;
   assignee: { id: string; name: string | null; email: string } | null;
   createdBy: { id: string; name: string | null; email: string };
   project: { id: string; name: string } | null;
