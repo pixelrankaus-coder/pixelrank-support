@@ -66,9 +66,32 @@ export default async function TaskDetailPage({
     notFound();
   }
 
+  // Serialize dates to strings for client component
+  const serializedTask = {
+    ...task,
+    dueDate: task.dueDate?.toISOString() || null,
+    createdAt: task.createdAt.toISOString(),
+    updatedAt: task.updatedAt.toISOString(),
+    notes: task.notes.map((note) => ({
+      ...note,
+      createdAt: note.createdAt.toISOString(),
+      updatedAt: note.updatedAt.toISOString(),
+    })),
+    subtasks: task.subtasks.map((subtask) => ({
+      ...subtask,
+      createdAt: subtask.createdAt.toISOString(),
+    })),
+    timeEntries: task.timeEntries.map((entry) => ({
+      ...entry,
+      date: entry.date.toISOString(),
+      createdAt: entry.createdAt.toISOString(),
+      updatedAt: entry.updatedAt.toISOString(),
+    })),
+  };
+
   return (
     <TaskDetailClient
-      task={task}
+      task={serializedTask}
       agents={agents}
       currentUserId={session.user.id}
     />
