@@ -66,9 +66,30 @@ export default async function ProjectDetailPage({
     done: project.tasks.filter((t) => t.status === "DONE").length,
   };
 
+  // Serialize dates to strings for client component
+  const serializedProject = {
+    ...project,
+    startDate: project.startDate?.toISOString() || null,
+    dueDate: project.dueDate?.toISOString() || null,
+    completedAt: project.completedAt?.toISOString() || null,
+    createdAt: project.createdAt.toISOString(),
+    updatedAt: project.updatedAt.toISOString(),
+    tasks: project.tasks.map((task) => ({
+      ...task,
+      dueDate: task.dueDate?.toISOString() || null,
+      createdAt: task.createdAt.toISOString(),
+    })),
+    deliverables: project.deliverables.map((d) => ({
+      ...d,
+      dueDate: d.dueDate?.toISOString() || null,
+      createdAt: d.createdAt.toISOString(),
+      updatedAt: d.updatedAt.toISOString(),
+    })),
+  };
+
   return (
     <ProjectDetailClient
-      project={project}
+      project={serializedProject}
       taskStats={taskStats}
       agents={agents}
       contacts={contacts}
