@@ -142,8 +142,8 @@ export async function POST(
         },
       });
 
+      const smtpStart = Date.now();
       try {
-        const smtpStart = Date.now();
         const transporter = nodemailer.createTransport({
           host: channel.smtpHost,
           port: channel.smtpPort,
