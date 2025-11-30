@@ -1,0 +1,75 @@
+Chat Session Summary - Ticket System V1
+Project Overview
+Tech Stack: Next.js 14 (App Router), Prisma + SQLite, Tailwind CSS, NextAuth
+Purpose: Freshdesk clone helpdesk application
+Work Completed This Session
+1. Agent Avatars (Completed Previously)
+Added avatar display throughout the app (conversations, reply composer, agents list)
+2. Automation Engine (Main Focus - Completed)
+New File Created:
+src/lib/automation-engine.ts - Core automation execution engine
+Features:
+Triggers: TICKET_CREATED, TICKET_UPDATED
+Condition Fields: status, priority, assigneeId, groupId, subject, description, source, contactId
+Change Detection: status_changed, priority_changed, assignee_changed
+Operators: equals, not_equals, contains, not_contains, starts_with, ends_with, is_empty, is_not_empty
+Actions:
+SET_STATUS
+SET_PRIORITY
+ASSIGN_AGENT
+ASSIGN_GROUP
+ADD_TAG
+REMOVE_TAG
+ADD_NOTE
+SEND_EMAIL (placeholder)
+Files Modified to Hook Automation Engine:
+File	Purpose
+src/lib/actions.ts	Agent ticket creation/updates
+src/app/api/portal/tickets/route.ts	Portal ticket creation
+src/app/api/portal/tickets/[id]/messages/route.ts	Portal replies (status change)
+src/app/api/webhooks/email/route.ts	Email webhook tickets & replies
+src/lib/email-fetcher.ts	IMAP fetched tickets & replies
+Pre-existing Automation UI/API (Already Built):
+src/app/(dashboard)/admin/workflows/automations/ - Full UI for creating/editing automations
+src/app/api/admin/automations/ - CRUD API endpoints
+How Automations Work
+Create automation in Admin > Workflows > Automations
+Set trigger: When ticket is created or updated
+Define conditions: Match tickets based on fields (status, priority, subject contains text, etc.)
+Configure actions: Automatically assign agents, change status, add tags, etc.
+Automations run asynchronously (non-blocking) after ticket operations
+Key Code Patterns Used
+// Non-blocking automation execution
+runTicketCreatedAutomations(ticket.id).catch((err) =>
+  console.error("Failed to run ticket created automations:", err)
+);
+
+// Update with previous data for change detection
+runTicketUpdatedAutomations(ticketId, { status: previousStatus }).catch((err) =>
+  console.error("Failed to run ticket updated automations:", err)
+);
+Database Schema (Automation Model - Already Existed)
+model Automation {
+  id         String   @id @default(cuid())
+  name       String
+  trigger    String   // TICKET_CREATED, TICKET_UPDATED
+  conditions String   // JSON array of conditions
+  actions    String   // JSON array of actions
+  priority   Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+Pre-existing TypeScript Errors (Not Related to This Work)
+Knowledge base articles page - Date type mismatch
+Portal tickets page - Date type mismatch
+Customer auth - JWTPayload type
+Email fetcher - Stream type compatibility
+Next Steps / Future Enhancements
+More avatar locations throughout app
+Contact/customer avatars
+Email notifications (SEND_EMAIL action is placeholder)
+Knowledge base improvements
+Reports/analytics dashboard
+Customer portal enhancements
+Time-based automations (SLA triggers)

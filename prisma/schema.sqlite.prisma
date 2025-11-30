@@ -1,0 +1,480 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+// Supports both SQLite (local dev) and PostgreSQL (production)
+// SQLite: DATABASE_URL="file:./dev.db"
+// PostgreSQL: DATABASE_URL="postgresql://user:password@host:5432/database"
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         String   @default("AGENT") // AGENT, ADMIN
+  createdAt    DateTime @default(now())
+
+  // Agent profile details
+  phone        String?
+  mobile       String?
+  jobTitle     String?
+  timezone     String   @default("UTC")
+  signature    String?  // HTML signature for emails
+  avatar       String?  // URL or base64 image
+
+  // Agent type and scope
+  agentType    String   @default("FULL_TIME") // FULL_TIME, OCCASIONAL, FIELD_TECHNICIAN
+  ticketScope  String   @default("ALL") // ALL, GROUP, ASSIGNED
+
+  // Gamification
+  level        String   @default("Beginner")
+  points       Int      @default(0)
+
+  // Support channels (comma-separated or JSON)
+  channels     String?  // "TICKET,PHONE,CHAT"
+
+  ticketsAssigned Ticket[]        @relation("TicketAssignee")
+  ticketsCreated  Ticket[]        @relation("TicketCreator")
+  messages        TicketMessage[]
+  groups          GroupMember[]
+  badges          AgentBadge[]
+  notifications   Notification[]
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  website   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  contacts Contact[]
+}
+
+model Contact {
+  id           String   @id @default(cuid())
+  name         String?
+  email        String   @unique
+  passwordHash String?  // For customer portal login
+  isVerified   Boolean  @default(false) // Email verification status
+  title        String?
+  company      String?
+  workPhone    String?
+  facebook     String?
+  twitter      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  companyId  String?
+  companyRef Company? @relation(fields: [companyId], references: [id])
+
+  tickets  Ticket[]
+  messages TicketMessage[]
+}
+
+model Ticket {
+  id           String   @id @default(cuid())
+  ticketNumber Int      @unique
+  subject      String
+  status       String   @default("OPEN") // OPEN, PENDING, RESOLVED, CLOSED
+  priority     String   @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  source       String   @default("PORTAL") // PORTAL, EMAIL, PHONE, CHAT
+  description  String?
+
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id])
+
+  assigneeId String?
+  assignee   User?   @relation("TicketAssignee", fields: [assigneeId], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("TicketCreator", fields: [createdById], references: [id])
+
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id])
+
+  // SLA tracking
+  firstResponseDue DateTime?
+  resolutionDue    DateTime?
+  firstRespondedAt DateTime?
+  resolvedAt       DateTime?
+
+  // AI Assist fields
+  aiSummary     String?
+  aiReply       String?
+  aiGeneratedAt DateTime?
+  aiModel       String?
+
+  messages TicketMessage[]
+  tags     TicketTag[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([priority])
+  @@index([contactId])
+  @@index([assigneeId])
+  @@index([createdAt])
+}
+
+model TicketMessage {
+  id       String @id @default(cuid())
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorType String // AGENT, CONTACT, SYSTEM
+  authorId   String?
+  authorName String?
+
+  agentAuthor     User?    @relation(fields: [agentAuthorId], references: [id])
+  agentAuthorId   String?
+  contactAuthor   Contact? @relation(fields: [contactAuthorId], references: [id])
+  contactAuthorId String?
+
+  body      String
+  internal  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+  @@index([createdAt])
+}
+
+model Tag {
+  id      String      @id @default(cuid())
+  name    String      @unique
+  color   String?
+  tickets TicketTag[]
+}
+
+model TicketTag {
+  ticketId String
+  tagId    String
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([ticketId, tagId])
+}
+
+model Counter {
+  id    String @id @default("ticket_number")
+  value Int    @default(0)
+}
+
+// Groups for organizing agents
+model Group {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  members  GroupMember[]
+  tickets  Ticket[]
+}
+
+model GroupMember {
+  groupId String
+  userId  String
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+}
+
+// Canned Responses
+model CannedResponseFolder {
+  id        String   @id @default(cuid())
+  name      String
+  type      String   @default("GENERAL") // PERSONAL, GENERAL
+  createdAt DateTime @default(now())
+
+  ownerId   String? // For personal folders
+  responses CannedResponse[]
+}
+
+model CannedResponse {
+  id        String   @id @default(cuid())
+  title     String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  folderId String
+  folder   CannedResponseFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  // Visibility
+  visibility String @default("ALL") // MYSELF, ALL, GROUP
+  ownerId    String? // For personal responses
+}
+
+// SLA Policies
+model SLAPolicy {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  targets SLATarget[]
+}
+
+model SLATarget {
+  id              String @id @default(cuid())
+  priority        String // LOW, MEDIUM, HIGH, URGENT
+  firstResponseTime Int    // in minutes
+  resolutionTime    Int    // in minutes
+  operationalHours  String @default("BUSINESS") // BUSINESS, CALENDAR
+  escalationEnabled Boolean @default(true)
+
+  policyId String
+  policy   SLAPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, priority])
+}
+
+// Business Hours
+model BusinessHours {
+  id        String   @id @default(cuid())
+  name      String
+  timezone  String   @default("UTC")
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  schedules BusinessSchedule[]
+  holidays  Holiday[]
+}
+
+model BusinessSchedule {
+  id        String @id @default(cuid())
+  dayOfWeek Int    // 0=Sunday, 1=Monday, etc.
+  startTime String // "09:00"
+  endTime   String // "17:00"
+  isEnabled Boolean @default(true)
+
+  businessHoursId String
+  businessHours   BusinessHours @relation(fields: [businessHoursId], references: [id], onDelete: Cascade)
+
+  @@unique([businessHoursId, dayOfWeek])
+}
+
+model Holiday {
+  id   String   @id @default(cuid())
+  name String
+  date DateTime
+
+  businessHoursId String
+  businessHours   BusinessHours @relation(fields: [businessHoursId], references: [id], onDelete: Cascade)
+}
+
+// Automations
+model Automation {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  trigger     String   // TICKET_CREATED, TICKET_UPDATED, TIME_BASED
+  conditions  String   // JSON string of conditions
+  actions     String   // JSON string of actions
+  priority    Int      @default(0) // Order of execution
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@index([isActive])
+  @@index([trigger])
+}
+
+// Email Channel Configuration
+model EmailChannel {
+  id              String   @id @default(cuid())
+  name            String
+  email           String   @unique
+  isDefault       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+
+  // SMTP Settings for outbound
+  smtpHost        String?
+  smtpPort        Int?
+  smtpUser        String?
+  smtpPassword    String?
+  smtpSecure      Boolean  @default(true)
+
+  // IMAP Settings for inbound (optional)
+  imapHost        String?
+  imapPort        Int?
+  imapUser        String?
+  imapPassword    String?
+  imapSecure      Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+// Email Templates
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique // e.g., "ticket_created", "agent_reply"
+  subject     String
+  body        String   // HTML content
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+// Email Log for tracking sent emails
+model EmailLog {
+  id          String   @id @default(cuid())
+  ticketId    String?
+  to          String
+  subject     String
+  status      String   @default("SENT") // SENT, FAILED, PENDING
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId])
+  @@index([createdAt])
+}
+
+// Knowledge Base - Categories
+model KBCategory {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  icon        String?  // Icon name or emoji
+  sortOrder   Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  parentId    String?
+  parent      KBCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    KBCategory[] @relation("CategoryHierarchy")
+  articles    KBArticle[]
+
+  @@index([parentId])
+  @@index([isPublished])
+}
+
+// Knowledge Base - Articles
+model KBArticle {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  content     String   // HTML/Markdown content
+  excerpt     String?  // Short description for search results
+  status      String   @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+  sortOrder   Int      @default(0)
+
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+
+  // Analytics
+  viewCount       Int      @default(0)
+  helpfulCount    Int      @default(0)
+  notHelpfulCount Int      @default(0)
+
+  // Author tracking
+  authorId    String?
+
+  categoryId  String
+  category    KBCategory @relation(fields: [categoryId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+  publishedAt DateTime?
+
+  feedback    KBArticleFeedback[]
+
+  @@index([categoryId])
+  @@index([status])
+}
+
+// Knowledge Base - Article Feedback
+model KBArticleFeedback {
+  id          String   @id @default(cuid())
+  articleId   String
+  article     KBArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  isHelpful   Boolean
+  comment     String?
+  contactId   String?  // Optional: link to contact if logged in
+  ipAddress   String?  // For anonymous feedback
+  createdAt   DateTime @default(now())
+
+  @@index([articleId])
+}
+
+// Agent Presence Tracking for Collision Detection
+model TicketPresence {
+  id          String   @id @default(cuid())
+  ticketId    String
+  userId      String
+  userName    String?
+  isTyping    Boolean  @default(false)
+  lastSeen    DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@unique([ticketId, userId])
+  @@index([ticketId])
+  @@index([lastSeen])
+}
+
+// AI Settings - Store provider configuration
+model AISettings {
+  id          String   @id @default("default")
+  provider    String   @default("anthropic") // anthropic, openai
+  apiKey      String?  // Encrypted API key
+  model       String?  // Model to use (e.g., claude-3-5-haiku-20241022, gpt-4o-mini)
+  isEnabled   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+// Agent Badges for Gamification
+model AgentBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeName String
+  earnedAt  DateTime @default(now())
+
+  @@unique([userId, badgeName])
+  @@index([userId])
+}
+
+// Notifications for agents
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   // PRIVATE_NOTE, STATUS_UPDATED, TICKET_ASSIGNED, MENTION
+  title       String
+  message     String
+  ticketId    String?
+  ticketNumber Int?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+// Cache table for production (optional - used when Redis not available)
+model Cache {
+  key       String   @id
+  value     String
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}

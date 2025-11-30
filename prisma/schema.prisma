@@ -1,0 +1,911 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums for Tasks and Projects
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum ProjectStatus {
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  ARCHIVED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum Recurrence {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         String   @default("AGENT") // AGENT, ADMIN
+  createdAt    DateTime @default(now())
+
+  // Agent profile details
+  phone        String?
+  mobile       String?
+  jobTitle     String?
+  timezone     String   @default("UTC")
+  signature    String?  @db.Text // HTML signature for emails
+  avatar       String?  @db.Text // URL or base64 image
+
+  // Agent type and scope
+  agentType    String   @default("FULL_TIME") // FULL_TIME, OCCASIONAL, FIELD_TECHNICIAN
+  ticketScope  String   @default("ALL") // ALL, GROUP, ASSIGNED
+
+  // Gamification
+  level        String   @default("Beginner")
+  points       Int      @default(0)
+
+  // Support channels (comma-separated or JSON)
+  channels     String?  // "TICKET,PHONE,CHAT"
+
+  ticketsAssigned Ticket[]        @relation("TicketAssignee")
+  ticketsCreated  Ticket[]        @relation("TicketCreator")
+  messages        TicketMessage[]
+  groups          GroupMember[]
+  badges          AgentBadge[]
+  notifications   Notification[]
+
+  // Project & Task relations
+  managedProjects Project[]       @relation("ProjectManager")
+  tasksAssigned   Task[]          @relation("TaskAssignee")
+  tasksCreated    Task[]          @relation("TaskCreator")
+  taskNotes       TaskNote[]
+  timeEntries     TimeEntry[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  website   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  // Blaze.ai integration
+  isOnBlaze        Boolean  @default(false)
+  blazeApiKey      String?  // API key for this client's Blaze workspace
+  blazeWorkspaceId String?  // Blaze workspace identifier
+  blazeStartDate   DateTime?
+  blazeLastSync    DateTime? // Last time we synced/validated the API key
+  blazeFacebook    Boolean  @default(false)
+  blazeInstagram   Boolean  @default(false)
+  blazeGoogle      Boolean  @default(false)
+  blazeLinkedIn    Boolean  @default(false)
+  blazeTikTok      Boolean  @default(false)
+  blazeWordPress   Boolean  @default(false)
+  blazeMailchimp   Boolean  @default(false)
+  blazeN8n         Boolean  @default(false)
+  blazeZapier      Boolean  @default(false)
+
+  contacts         Contact[]
+  projects         Project[]
+  tasks            Task[]
+  blazeActivityLog BlazeActivityLog[]
+
+  @@index([name])
+  @@index([isOnBlaze])
+}
+
+model Contact {
+  id           String   @id @default(cuid())
+  name         String?
+  email        String   @unique
+  passwordHash String?  // For customer portal login
+  isVerified   Boolean  @default(false) // Email verification status
+  title        String?
+  company      String?
+  workPhone    String?
+  facebook     String?
+  twitter      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  companyId  String?
+  companyRef Company? @relation(fields: [companyId], references: [id])
+
+  tickets  Ticket[]
+  messages TicketMessage[]
+  tasks    Task[]
+
+  @@index([email])
+  @@index([companyId])
+}
+
+model Ticket {
+  id           String   @id @default(cuid())
+  ticketNumber Int      @unique
+  subject      String
+  status       String   @default("OPEN") // OPEN, PENDING, RESOLVED, CLOSED
+  priority     String   @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  source       String   @default("PORTAL") // PORTAL, EMAIL, PHONE, CHAT
+  description  String?  @db.Text
+
+  contactId String?
+  contact   Contact? @relation(fields: [contactId], references: [id])
+
+  assigneeId String?
+  assignee   User?   @relation("TicketAssignee", fields: [assigneeId], references: [id])
+
+  createdById String?
+  createdBy   User?   @relation("TicketCreator", fields: [createdById], references: [id])
+
+  groupId String?
+  group   Group?  @relation(fields: [groupId], references: [id])
+
+  // SLA tracking
+  firstResponseDue DateTime?
+  resolutionDue    DateTime?
+  firstRespondedAt DateTime?
+  resolvedAt       DateTime?
+
+  // AI Assist fields
+  aiSummary     String?  @db.Text
+  aiReply       String?  @db.Text
+  aiGeneratedAt DateTime?
+  aiModel       String?
+
+  messages    TicketMessage[]
+  tags        TicketTag[]
+  attachments Attachment[]
+  tasks       Task[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([priority])
+  @@index([contactId])
+  @@index([assigneeId])
+  @@index([groupId])
+  @@index([createdAt])
+  @@index([ticketNumber])
+}
+
+model TicketMessage {
+  id       String @id @default(cuid())
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorType String // AGENT, CONTACT, SYSTEM
+  authorId   String?
+  authorName String?
+
+  agentAuthor     User?    @relation(fields: [agentAuthorId], references: [id])
+  agentAuthorId   String?
+  contactAuthor   Contact? @relation(fields: [contactAuthorId], references: [id])
+  contactAuthorId String?
+
+  body      String   @db.Text
+  internal  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  attachments Attachment[]
+
+  @@index([ticketId])
+  @@index([createdAt])
+  @@index([internal])
+}
+
+model Tag {
+  id      String      @id @default(cuid())
+  name    String      @unique
+  color   String?
+  tickets TicketTag[]
+
+  @@index([name])
+}
+
+model TicketTag {
+  ticketId String
+  tagId    String
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([ticketId, tagId])
+}
+
+model Counter {
+  id    String @id @default("ticket_number")
+  value Int    @default(0)
+}
+
+// Groups for organizing agents
+model Group {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  members  GroupMember[]
+  tickets  Ticket[]
+
+  @@index([name])
+}
+
+model GroupMember {
+  groupId String
+  userId  String
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([groupId, userId])
+}
+
+// Canned Responses
+model CannedResponseFolder {
+  id        String   @id @default(cuid())
+  name      String
+  type      String   @default("GENERAL") // PERSONAL, GENERAL
+  createdAt DateTime @default(now())
+
+  ownerId   String? // For personal folders
+  responses CannedResponse[]
+}
+
+model CannedResponse {
+  id        String   @id @default(cuid())
+  title     String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  folderId String
+  folder   CannedResponseFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  // Visibility
+  visibility String @default("ALL") // MYSELF, ALL, GROUP
+  ownerId    String? // For personal responses
+}
+
+// SLA Policies
+model SLAPolicy {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  targets SLATarget[]
+}
+
+model SLATarget {
+  id              String @id @default(cuid())
+  priority        String // LOW, MEDIUM, HIGH, URGENT
+  firstResponseTime Int    // in minutes
+  resolutionTime    Int    // in minutes
+  operationalHours  String @default("BUSINESS") // BUSINESS, CALENDAR
+  escalationEnabled Boolean @default(true)
+
+  policyId String
+  policy   SLAPolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+
+  @@unique([policyId, priority])
+}
+
+// Business Hours
+model BusinessHours {
+  id        String   @id @default(cuid())
+  name      String
+  timezone  String   @default("UTC")
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  schedules BusinessSchedule[]
+  holidays  Holiday[]
+}
+
+model BusinessSchedule {
+  id        String @id @default(cuid())
+  dayOfWeek Int    // 0=Sunday, 1=Monday, etc.
+  startTime String // "09:00"
+  endTime   String // "17:00"
+  isEnabled Boolean @default(true)
+
+  businessHoursId String
+  businessHours   BusinessHours @relation(fields: [businessHoursId], references: [id], onDelete: Cascade)
+
+  @@unique([businessHoursId, dayOfWeek])
+}
+
+model Holiday {
+  id   String   @id @default(cuid())
+  name String
+  date DateTime @db.Date
+
+  businessHoursId String
+  businessHours   BusinessHours @relation(fields: [businessHoursId], references: [id], onDelete: Cascade)
+}
+
+// Automations
+model Automation {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  trigger     String   // TICKET_CREATED, TICKET_UPDATED, TIME_BASED
+  conditions  String   @db.Text // JSON string of conditions
+  actions     String   @db.Text // JSON string of actions
+  priority    Int      @default(0) // Order of execution
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  @@index([isActive])
+  @@index([trigger])
+}
+
+// Email Channel Configuration
+model EmailChannel {
+  id              String   @id @default(cuid())
+  name            String
+  email           String   @unique
+  isDefault       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+
+  // SMTP Settings for outbound
+  smtpHost        String?
+  smtpPort        Int?
+  smtpUser        String?
+  smtpPassword    String?
+  smtpSecure      Boolean  @default(true)
+
+  // IMAP Settings for inbound (optional)
+  imapHost        String?
+  imapPort        Int?
+  imapUser        String?
+  imapPassword    String?
+  imapSecure      Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+// Email Templates
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique // e.g., "ticket_created", "agent_reply"
+  subject     String
+  body        String   @db.Text // HTML content
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+// Email Log for tracking sent emails
+model EmailLog {
+  id          String   @id @default(cuid())
+  ticketId    String?
+  to          String
+  subject     String
+  status      String   @default("SENT") // SENT, FAILED, PENDING
+  error       String?
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId])
+  @@index([createdAt])
+  @@index([status])
+}
+
+// Knowledge Base - Categories
+model KBCategory {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?  @db.Text
+  icon        String?  // Icon name or emoji
+  sortOrder   Int      @default(0)
+  isPublished Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  parentId    String?
+  parent      KBCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    KBCategory[] @relation("CategoryHierarchy")
+  articles    KBArticle[]
+
+  @@index([parentId])
+  @@index([isPublished])
+  @@index([slug])
+}
+
+// Knowledge Base - Articles
+model KBArticle {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  content     String   @db.Text // HTML/Markdown content
+  excerpt     String?  @db.Text // Short description for search results
+  status      String   @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
+  sortOrder   Int      @default(0)
+
+  // SEO
+  metaTitle       String?
+  metaDescription String? @db.Text
+
+  // Analytics
+  viewCount       Int      @default(0)
+  helpfulCount    Int      @default(0)
+  notHelpfulCount Int      @default(0)
+
+  // Author tracking
+  authorId    String?
+
+  categoryId  String
+  category    KBCategory @relation(fields: [categoryId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+  publishedAt DateTime?
+
+  feedback    KBArticleFeedback[]
+
+  @@index([categoryId])
+  @@index([status])
+  @@index([slug])
+}
+
+// Knowledge Base - Article Feedback
+model KBArticleFeedback {
+  id          String   @id @default(cuid())
+  articleId   String
+  article     KBArticle @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  isHelpful   Boolean
+  comment     String?   @db.Text
+  contactId   String?  // Optional: link to contact if logged in
+  ipAddress   String?  // For anonymous feedback
+  createdAt   DateTime @default(now())
+
+  @@index([articleId])
+}
+
+// Agent Presence Tracking for Collision Detection
+model TicketPresence {
+  id          String   @id @default(cuid())
+  ticketId    String
+  userId      String
+  userName    String?
+  isTyping    Boolean  @default(false)
+  lastSeen    DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@unique([ticketId, userId])
+  @@index([ticketId])
+  @@index([lastSeen])
+}
+
+// AI Settings - Multi-provider configuration
+model AISettings {
+  id                String   @id @default("default")
+
+  // Active provider: anthropic, openai, openrouter
+  activeProvider    String   @default("anthropic")
+
+  // API Keys (stored securely, masked in UI)
+  anthropicApiKey   String?  @db.Text
+  openaiApiKey      String?  @db.Text
+  openrouterApiKey  String?  @db.Text
+
+  // Model selection per provider
+  anthropicModel    String   @default("claude-3-5-haiku-20241022")
+  openaiModel       String   @default("gpt-4o-mini")
+  openrouterModel   String   @default("meta-llama/llama-3.1-8b-instruct:free")
+
+  // Task-specific provider/model overrides
+  summaryProvider   String?  // Provider to use for summaries (null = use activeProvider)
+  summaryModel      String?  // Model override for summaries
+  replyProvider     String?  // Provider to use for reply generation
+  replyModel        String?  // Model override for replies
+
+  // Feature toggles
+  isEnabled         Boolean  @default(false)
+  useFallback       Boolean  @default(true)  // Try next provider if primary fails
+
+  // Fallback order (comma-separated): "openai,openrouter"
+  fallbackOrder     String   @default("openai,openrouter")
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+// AI Usage Log for cost tracking and analytics
+model AIUsageLog {
+  id            String   @id @default(cuid())
+  provider      String   // anthropic, openai, openrouter
+  model         String
+  taskType      String   // summary, reply, categorize, etc.
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  estimatedCost Float?   // Calculated cost in USD
+  latencyMs     Int?     // Response time in milliseconds
+  success       Boolean  @default(true)
+  errorMessage  String?  @db.Text
+
+  // Optional relations
+  ticketId      String?
+  userId        String?  // Agent who triggered the AI call
+
+  createdAt     DateTime @default(now())
+
+  @@index([provider])
+  @@index([taskType])
+  @@index([createdAt])
+  @@index([ticketId])
+}
+
+// Agent Badges for Gamification
+model AgentBadge {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badgeName String
+  earnedAt  DateTime @default(now())
+
+  @@unique([userId, badgeName])
+  @@index([userId])
+}
+
+// Notifications for agents
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type        String   // PRIVATE_NOTE, STATUS_UPDATED, TICKET_ASSIGNED, MENTION
+  title       String
+  message     String   @db.Text
+  ticketId    String?
+  ticketNumber Int?
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+// Cache table for when Redis is not available
+model Cache {
+  key       String   @id
+  value     String   @db.Text
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+// File Attachments
+model Attachment {
+  id          String   @id @default(cuid())
+  filename    String
+  originalName String
+  mimeType    String
+  size        Int      // in bytes
+  url         String   @db.Text
+  storageKey  String?  // Storage provider key/path
+
+  // Relations
+  ticketId    String?
+  ticket      Ticket?        @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  messageId   String?
+  message     TicketMessage? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  uploadedById   String?
+  uploadedByType String?  // AGENT, CONTACT
+
+  createdAt   DateTime @default(now())
+
+  @@index([ticketId])
+  @@index([messageId])
+}
+
+// Password Reset Tokens
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  email     String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([email])
+}
+
+// Email Queue for reliable delivery
+model EmailQueue {
+  id          String   @id @default(cuid())
+  to          String
+  subject     String
+  body        String   @db.Text
+  templateId  String?
+  variables   String?  @db.Text // JSON
+  status      String   @default("PENDING") // PENDING, SENT, FAILED
+  attempts    Int      @default(0)
+  error       String?  @db.Text
+  scheduledAt DateTime @default(now())
+  sentAt      DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+// AI Usage Tracking for cost monitoring
+model AIUsage {
+  id            String   @id @default(cuid())
+  provider      String   // anthropic, openai
+  model         String   // claude-3-5-haiku-20241022, gpt-4o-mini, etc.
+  feature       String   // ai_assist, auto_categorize, etc.
+
+  // Token counts
+  inputTokens   Int
+  outputTokens  Int
+  totalTokens   Int
+
+  // Cost tracking (in USD cents for precision)
+  inputCost     Float    @default(0)
+  outputCost    Float    @default(0)
+  totalCost     Float    @default(0)
+
+  // Context
+  ticketId      String?
+  userId        String?  // Agent who triggered it
+
+  // Response metadata
+  responseTime  Int?     // in milliseconds
+  cached        Boolean  @default(false)
+
+  createdAt     DateTime @default(now())
+
+  @@index([provider])
+  @@index([model])
+  @@index([feature])
+  @@index([createdAt])
+  @@index([userId])
+}
+
+// Deliverable status for SEO client work
+enum DeliverableStatus {
+  PENDING
+  IN_PROGRESS
+  DELIVERED
+  APPROVED
+}
+
+// Deliverable types for SEO agencies
+enum DeliverableType {
+  MONTHLY_REPORT
+  CONTENT_CALENDAR
+  KEYWORD_RESEARCH
+  TECHNICAL_AUDIT
+  LINK_BUILDING_REPORT
+  COMPETITOR_ANALYSIS
+  CONTENT_PIECE
+  OTHER
+}
+
+// Projects for grouping work
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  description String?       @db.Text
+  status      ProjectStatus @default(ACTIVE)
+
+  // Dates
+  startDate   DateTime?
+  dueDate     DateTime?
+  completedAt DateTime?
+
+  // Relations
+  companyId   String?
+  company     Company?      @relation(fields: [companyId], references: [id])
+  managerId   String?
+  manager     User?         @relation("ProjectManager", fields: [managerId], references: [id])
+
+  tasks        Task[]
+  deliverables Deliverable[]
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([companyId])
+  @@index([managerId])
+  @@index([status])
+}
+
+// Deliverables for tracking client work items
+model Deliverable {
+  id          String            @id @default(cuid())
+  name        String
+  description String?           @db.Text
+  type        DeliverableType   @default(OTHER)
+  status      DeliverableStatus @default(PENDING)
+
+  // Dates
+  dueDate     DateTime?
+  deliveredAt DateTime?
+
+  // Optional link to file/URL
+  fileUrl     String?           @db.Text
+
+  // Relations
+  projectId   String
+  project     Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([projectId])
+  @@index([status])
+  @@index([type])
+  @@index([dueDate])
+}
+
+// Tasks for tracking work items
+model Task {
+  id            String      @id @default(cuid())
+  title         String
+  description   String?     @db.Text
+  status        TaskStatus  @default(TODO)
+  priority      Priority    @default(MEDIUM)
+  sortOrder     Int         @default(0)
+
+  // Dates
+  dueDate       DateTime?
+  completedAt   DateTime?
+
+  // Assignments
+  assigneeId    String?
+  assignee      User?       @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdById   String
+  createdBy     User        @relation("TaskCreator", fields: [createdById], references: [id])
+
+  // Links (all optional - tasks can be standalone)
+  projectId     String?
+  project       Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  ticketId      String?
+  ticket        Ticket?     @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  companyId     String?
+  company       Company?    @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  contactId     String?
+  contact       Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  // Recurring tasks
+  isRecurring   Boolean     @default(false)
+  recurrence    Recurrence?
+  parentTaskId  String?
+  parentTask    Task?       @relation("RecurringTasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
+  childTasks    Task[]      @relation("RecurringTasks")
+
+  // Notes/comments
+  notes         TaskNote[]
+  timeEntries   TimeEntry[]
+  subtasks      Subtask[]
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([assigneeId])
+  @@index([createdById])
+  @@index([projectId])
+  @@index([ticketId])
+  @@index([companyId])
+  @@index([contactId])
+  @@index([status])
+  @@index([dueDate])
+}
+
+// Task Notes/Comments
+model TaskNote {
+  id          String   @id @default(cuid())
+  content     String   @db.Text
+
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([authorId])
+}
+
+// Subtasks/Checklists for tasks
+model Subtask {
+  id          String   @id @default(cuid())
+  title       String
+  isCompleted Boolean  @default(false)
+  sortOrder   Int      @default(0)
+
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([isCompleted])
+}
+
+// Time Entries for tracking work time
+model TimeEntry {
+  id          String   @id @default(cuid())
+  description String?
+  duration    Int      // Duration in minutes
+  date        DateTime @db.Date  // The date this time was worked
+
+  // For timer-based entries
+  startTime   DateTime?
+  endTime     DateTime?
+
+  // Billable tracking
+  isBillable  Boolean  @default(true)
+  hourlyRate  Float?   // Optional rate for billing
+
+  // Relations
+  taskId      String
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([taskId])
+  @@index([userId])
+  @@index([date])
+}
+
+// Blaze Activity Log for tracking API events
+model BlazeActivityLog {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  // Event type: API_TEST, API_SAVED, SYNC_SUCCESS, SYNC_FAILED, CHANNEL_CONNECTED, CHANNEL_DISCONNECTED
+  eventType   String
+  message     String
+  details     String?  @db.Text // JSON for additional data
+  status      String   @default("INFO") // INFO, SUCCESS, WARNING, ERROR
+
+  createdAt   DateTime @default(now())
+
+  @@index([companyId])
+  @@index([eventType])
+  @@index([createdAt])
+}
