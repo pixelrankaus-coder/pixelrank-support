@@ -183,7 +183,11 @@ async function getMyTasks(userId: string) {
     take: 10,
   });
 
-  return tasks;
+  // Serialize dates to strings for client component
+  return tasks.map((task) => ({
+    ...task,
+    dueDate: task.dueDate?.toISOString() || null,
+  }));
 }
 
 export default async function DashboardPage() {
