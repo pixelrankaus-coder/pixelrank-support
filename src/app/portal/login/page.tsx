@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
@@ -28,7 +28,7 @@ function GoogleIcon() {
   );
 }
 
-export default function CustomerLoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
@@ -88,6 +88,140 @@ export default function CustomerLoginPage() {
   };
 
   return (
+    <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+      {/* Google Sign-In Button */}
+      <div className="mb-6">
+        <button
+          type="button"
+          onClick={handleGoogleSignIn}
+          className="w-full flex items-center justify-center gap-3 py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+        >
+          <GoogleIcon />
+          Continue with Google
+        </button>
+      </div>
+
+      <div className="relative mb-6">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-gray-300" />
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="px-2 bg-white text-gray-500">
+            Or continue with email
+          </span>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {error && (
+          <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+
+        <div>
+          <label
+            htmlFor="email"
+            className="block text-sm font-medium text-gray-700"
+          >
+            Email address
+          </label>
+          <input
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-gray-700"
+            >
+              Password
+            </label>
+            <Link
+              href="/portal/forgot-password"
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              Forgot password?
+            </Link>
+          </div>
+          <input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={isLoading}
+          className="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+        >
+          {isLoading ? "Signing in..." : "Sign in"}
+        </button>
+      </form>
+
+      <div className="mt-6">
+        <div className="relative">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-gray-300" />
+          </div>
+          <div className="relative flex justify-center text-sm">
+            <span className="px-2 bg-white text-gray-500">
+              Don&apos;t have an account?
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          <Link
+            href="/portal/register"
+            className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+          >
+            Create an account
+          </Link>
+        </div>
+      </div>
+
+      <div className="mt-6 text-center">
+        <Link
+          href="/help"
+          className="text-sm text-blue-600 hover:text-blue-800"
+        >
+          Visit our Help Center
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function LoginFormFallback() {
+  return (
+    <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
+      <div className="animate-pulse space-y-6">
+        <div className="h-10 bg-gray-200 rounded-lg"></div>
+        <div className="h-4 bg-gray-200 rounded w-1/2 mx-auto"></div>
+        <div className="space-y-4">
+          <div className="h-10 bg-gray-200 rounded-lg"></div>
+          <div className="h-10 bg-gray-200 rounded-lg"></div>
+          <div className="h-10 bg-gray-200 rounded-lg"></div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function CustomerLoginPage() {
+  return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h1 className="text-center text-3xl font-bold text-gray-900">
@@ -99,119 +233,9 @@ export default function CustomerLoginPage() {
       </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
-          {/* Google Sign-In Button */}
-          <div className="mb-6">
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              className="w-full flex items-center justify-center gap-3 py-2.5 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-            >
-              <GoogleIcon />
-              Continue with Google
-            </button>
-          </div>
-
-          <div className="relative mb-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-300" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-white text-gray-500">
-                Or continue with email
-              </span>
-            </div>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Email address
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-medium text-gray-700"
-                >
-                  Password
-                </label>
-                <Link
-                  href="/portal/forgot-password"
-                  className="text-sm text-blue-600 hover:text-blue-800"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              {isLoading ? "Signing in..." : "Sign in"}
-            </button>
-          </form>
-
-          <div className="mt-6">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300" />
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">
-                  Don&apos;t have an account?
-                </span>
-              </div>
-            </div>
-
-            <div className="mt-6">
-              <Link
-                href="/portal/register"
-                className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-lg shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-              >
-                Create an account
-              </Link>
-            </div>
-          </div>
-
-          <div className="mt-6 text-center">
-            <Link
-              href="/help"
-              className="text-sm text-blue-600 hover:text-blue-800"
-            >
-              Visit our Help Center
-            </Link>
-          </div>
-        </div>
+        <Suspense fallback={<LoginFormFallback />}>
+          <LoginForm />
+        </Suspense>
       </div>
     </div>
   );
