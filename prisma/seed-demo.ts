@@ -1,4 +1,4 @@
-import { PrismaClient, TaskStatus, DeliverableStatus } from "@prisma/client";
+import { PrismaClient, TaskStatus, Priority } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -188,7 +188,7 @@ async function main() {
         title: task.title,
         projectId: task.projectId,
         status: task.status as TaskStatus,
-        priority: task.priority,
+        priority: task.priority as Priority,
         dueDate: task.dueDate,
         assigneeId: admin.id,
         createdById: admin.id,
