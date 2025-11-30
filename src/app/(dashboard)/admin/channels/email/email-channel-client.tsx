@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -16,6 +16,8 @@ import {
   DocumentTextIcon,
   ArrowPathIcon,
   InboxArrowDownIcon,
+  CommandLineIcon,
+  FunnelIcon,
 } from "@heroicons/react/24/outline";
 
 interface EmailChannel {
@@ -45,6 +47,18 @@ interface EmailTemplate {
   isActive: boolean;
 }
 
+interface ActivityLog {
+  id: string;
+  channelId: string | null;
+  channelName: string | null;
+  type: string;
+  level: string;
+  message: string;
+  details: Record<string, unknown> | null;
+  duration: number | null;
+  createdAt: string;
+}
+
 interface EmailChannelClientProps {
   emailChannels: EmailChannel[];
   emailTemplates: EmailTemplate[];
@@ -53,7 +67,7 @@ interface EmailChannelClientProps {
 export function EmailChannelClient({ emailChannels, emailTemplates }: EmailChannelClientProps) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [activeTab, setActiveTab] = useState<"channels" | "templates">("channels");
+  const [activeTab, setActiveTab] = useState<"channels" | "templates" | "logs">("channels");
   const [showChannelModal, setShowChannelModal] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [editingChannel, setEditingChannel] = useState<EmailChannel | null>(null);
@@ -62,6 +76,41 @@ export function EmailChannelClient({ emailChannels, emailTemplates }: EmailChann
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
   const [fetchingEmails, setFetchingEmails] = useState<string | null>(null);
   const [fetchResult, setFetchResult] = useState<{ success: boolean; message: string; newTickets?: number; newMessages?: number } | null>(null);
+
+  // Activity logs state
+  const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logFilter, setLogFilter] = useState<string>("all");
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
+  // Fetch activity logs
+  const fetchLogs = useCallback(async () => {
+    setLogsLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: "100" });
+      if (logFilter !== "all") {
+        params.set("level", logFilter.toUpperCase());
+      }
+      const res = await fetch(`/api/admin/email-channels/logs?${params}`);
+      const data = await res.json();
+      setActivityLogs(data.logs || []);
+    } catch (error) {
+      console.error("Failed to fetch logs:", error);
+    } finally {
+      setLogsLoading(false);
+    }
+  }, [logFilter]);
+
+  // Auto-refresh logs when on logs tab
+  useEffect(() => {
+    if (activeTab === "logs") {
+      fetchLogs();
+      if (autoRefresh) {
+        const interval = setInterval(fetchLogs, 5000);
+        return () => clearInterval(interval);
+      }
+    }
+  }, [activeTab, autoRefresh, fetchLogs]);
 
   const [channelForm, setChannelForm] = useState({
     name: "",
@@ -355,6 +404,19 @@ export function EmailChannelClient({ emailChannels, emailTemplates }: EmailChann
               Email Templates
             </div>
           </button>
+          <button
+            onClick={() => setActiveTab("logs")}
+            className={`py-3 border-b-2 text-sm font-medium transition-colors ${
+              activeTab === "logs"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <CommandLineIcon className="w-4 h-4" />
+              Activity Logs
+            </div>
+          </button>
         </div>
       </div>
 
@@ -531,6 +593,119 @@ export function EmailChannelClient({ emailChannels, emailTemplates }: EmailChann
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === "logs" && (
+          <div className="bg-white rounded-lg border border-gray-200">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Activity Logs</h2>
+                <p className="text-sm text-gray-500">
+                  Real-time email operations and troubleshooting information
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <FunnelIcon className="w-4 h-4 text-gray-400" />
+                  <select
+                    value={logFilter}
+                    onChange={(e) => setLogFilter(e.target.value)}
+                    className="text-sm border border-gray-300 rounded-md px-2 py-1.5"
+                  >
+                    <option value="all">All Levels</option>
+                    <option value="error">Errors Only</option>
+                    <option value="warn">Warnings</option>
+                    <option value="info">Info</option>
+                  </select>
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={autoRefresh}
+                    onChange={(e) => setAutoRefresh(e.target.checked)}
+                    className="w-4 h-4 text-blue-600 rounded border-gray-300"
+                  />
+                  Auto-refresh
+                </label>
+                <button
+                  onClick={fetchLogs}
+                  disabled={logsLoading}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <ArrowPathIcon className={`w-4 h-4 ${logsLoading ? "animate-spin" : ""}`} />
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {/* Logs Display */}
+            <div className="bg-gray-900 text-gray-100 font-mono text-sm max-h-[600px] overflow-y-auto">
+              {activityLogs.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <CommandLineIcon className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No activity logs yet</p>
+                  <p className="text-xs mt-1">Logs will appear here when email operations occur</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-gray-800">
+                  {activityLogs.map((log) => (
+                    <div key={log.id} className="p-3 hover:bg-gray-800/50">
+                      <div className="flex items-start gap-3">
+                        <span className="text-gray-500 text-xs whitespace-nowrap">
+                          {new Date(log.createdAt).toLocaleTimeString()}
+                        </span>
+                        <span className={`px-1.5 py-0.5 text-xs rounded font-medium ${
+                          log.level === "ERROR" ? "bg-red-500/20 text-red-400" :
+                          log.level === "WARN" ? "bg-yellow-500/20 text-yellow-400" :
+                          log.level === "INFO" ? "bg-blue-500/20 text-blue-400" :
+                          "bg-gray-500/20 text-gray-400"
+                        }`}>
+                          {log.level}
+                        </span>
+                        <span className={`px-1.5 py-0.5 text-xs rounded ${
+                          log.type === "CONNECTION" ? "bg-purple-500/20 text-purple-400" :
+                          log.type === "FETCH" ? "bg-green-500/20 text-green-400" :
+                          log.type === "SEND" ? "bg-cyan-500/20 text-cyan-400" :
+                          log.type === "ERROR" ? "bg-red-500/20 text-red-400" :
+                          "bg-gray-500/20 text-gray-400"
+                        }`}>
+                          {log.type}
+                        </span>
+                        {log.channelName && (
+                          <span className="text-gray-500 text-xs">
+                            [{log.channelName}]
+                          </span>
+                        )}
+                        <span className="flex-1 text-gray-200">{log.message}</span>
+                        {log.duration && (
+                          <span className="text-gray-500 text-xs">
+                            {log.duration}ms
+                          </span>
+                        )}
+                      </div>
+                      {log.details && (
+                        <pre className="mt-2 ml-20 text-xs text-gray-400 bg-gray-800 p-2 rounded overflow-x-auto">
+                          {JSON.stringify(log.details, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 border-t border-gray-200 bg-gray-50 text-xs text-gray-500 flex items-center justify-between">
+              <span>Showing last {activityLogs.length} entries</span>
+              <span>
+                {autoRefresh && (
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                    Live updating every 5s
+                  </span>
+                )}
+              </span>
             </div>
           </div>
         )}

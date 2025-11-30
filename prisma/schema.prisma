@@ -418,6 +418,24 @@ model EmailLog {
   @@index([status])
 }
 
+// Email Activity Log for real-time troubleshooting
+model EmailActivityLog {
+  id            String   @id @default(cuid())
+  channelId     String?  // null for system-wide events
+  channelName   String?  // Store channel name for reference
+  type          String   // CONNECTION, FETCH, SEND, ERROR, INFO
+  level         String   @default("INFO") // DEBUG, INFO, WARN, ERROR
+  message       String   @db.Text
+  details       String?  @db.Text // JSON for extra data
+  duration      Int?     // Duration in ms for timed operations
+  createdAt     DateTime @default(now())
+
+  @@index([channelId])
+  @@index([type])
+  @@index([level])
+  @@index([createdAt])
+}
+
 // Knowledge Base - Categories
 model KBCategory {
   id          String   @id @default(cuid())

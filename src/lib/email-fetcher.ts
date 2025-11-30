@@ -2,6 +2,7 @@ import Imap from "imap";
 import { simpleParser, ParsedMail, Source } from "mailparser";
 import { prisma } from "./db";
 import { runTicketCreatedAutomations, runTicketUpdatedAutomations } from "./automation-engine";
+import { emailLogger } from "./email-activity-logger";
 
 interface FetchResult {
   success: boolean;
@@ -71,15 +72,30 @@ async function fetchEmailsFromChannel(channel: EmailChannelConfig): Promise<{
   emails: ParsedMail[];
   errors: string[];
 }> {
+  const startTime = Date.now();
+  const channelName = channel.email;
+
   return new Promise((resolve) => {
     const emails: ParsedMail[] = [];
     const errors: string[] = [];
 
     if (!channel.imapHost || !channel.imapPort || !channel.imapUser || !channel.imapPassword) {
-      errors.push(`IMAP not configured for ${channel.email}`);
+      const error = `IMAP not configured for ${channel.email}`;
+      errors.push(error);
+      emailLogger.warn(error, {
+        channelId: channel.id,
+        channelName,
+        details: { imapHost: channel.imapHost, imapPort: channel.imapPort },
+      });
       resolve({ emails, errors });
       return;
     }
+
+    emailLogger.connection(`Connecting to IMAP ${channel.imapHost}:${channel.imapPort}`, {
+      channelId: channel.id,
+      channelName,
+      details: { host: channel.imapHost, port: channel.imapPort, secure: channel.imapSecure },
+    });
 
     const imap = new Imap({
       user: channel.imapUser,
@@ -91,30 +107,65 @@ async function fetchEmailsFromChannel(channel: EmailChannelConfig): Promise<{
     });
 
     imap.once("ready", () => {
+      const connectDuration = Date.now() - startTime;
+      emailLogger.connection("IMAP connection established", {
+        channelId: channel.id,
+        channelName,
+        duration: connectDuration,
+      });
+
       imap.openBox("INBOX", false, (err, box) => {
         if (err) {
-          errors.push(`Failed to open inbox: ${err.message}`);
+          const error = `Failed to open inbox: ${err.message}`;
+          errors.push(error);
+          emailLogger.error(error, {
+            channelId: channel.id,
+            channelName,
+            details: { error: err.message },
+          });
           imap.end();
           resolve({ emails, errors });
           return;
         }
 
+        emailLogger.fetch(`Opened INBOX (${box?.messages?.total || 0} total messages)`, {
+          channelId: channel.id,
+          channelName,
+          details: { totalMessages: box?.messages?.total, unseenMessages: box?.messages?.unseen },
+        });
+
         // Search for unseen emails
         imap.search(["UNSEEN"], (searchErr, results) => {
           if (searchErr) {
-            errors.push(`Search failed: ${searchErr.message}`);
+            const error = `Search failed: ${searchErr.message}`;
+            errors.push(error);
+            emailLogger.error(error, {
+              channelId: channel.id,
+              channelName,
+              details: { error: searchErr.message },
+            });
             imap.end();
             resolve({ emails, errors });
             return;
           }
 
           if (!results || results.length === 0) {
+            emailLogger.fetch("No new emails found", {
+              channelId: channel.id,
+              channelName,
+              duration: Date.now() - startTime,
+            });
             console.log(`No new emails for ${channel.email}`);
             imap.end();
             resolve({ emails, errors });
             return;
           }
 
+          emailLogger.fetch(`Found ${results.length} new emails to process`, {
+            channelId: channel.id,
+            channelName,
+            details: { count: results.length },
+          });
           console.log(`Found ${results.length} new emails for ${channel.email}`);
 
           const fetch = imap.fetch(results, { bodies: "", markSeen: true });
@@ -124,13 +175,35 @@ async function fetchEmailsFromChannel(channel: EmailChannelConfig): Promise<{
             msg.on("body", (stream) => {
               simpleParser(stream as unknown as Source, (parseErr, parsed) => {
                 if (parseErr) {
-                  errors.push(`Parse error: ${parseErr.message}`);
+                  const error = `Parse error: ${parseErr.message}`;
+                  errors.push(error);
+                  emailLogger.error(error, {
+                    channelId: channel.id,
+                    channelName,
+                  });
                 } else {
                   emails.push(parsed);
+                  emailLogger.fetch(`Parsed email: ${parsed.subject?.substring(0, 50) || "No subject"}`, {
+                    channelId: channel.id,
+                    channelName,
+                    level: "DEBUG",
+                    details: {
+                      from: parsed.from?.value?.[0]?.address,
+                      subject: parsed.subject,
+                      date: parsed.date?.toISOString(),
+                    },
+                  });
                 }
 
                 pending--;
                 if (pending === 0) {
+                  const totalDuration = Date.now() - startTime;
+                  emailLogger.fetch(`Completed fetching ${emails.length} emails`, {
+                    channelId: channel.id,
+                    channelName,
+                    duration: totalDuration,
+                    details: { emailCount: emails.length, errorCount: errors.length },
+                  });
                   imap.end();
                   resolve({ emails, errors });
                 }
@@ -139,7 +212,13 @@ async function fetchEmailsFromChannel(channel: EmailChannelConfig): Promise<{
           });
 
           fetch.once("error", (fetchErr) => {
-            errors.push(`Fetch error: ${fetchErr.message}`);
+            const error = `Fetch error: ${fetchErr.message}`;
+            errors.push(error);
+            emailLogger.error(error, {
+              channelId: channel.id,
+              channelName,
+              details: { error: fetchErr.message },
+            });
             imap.end();
             resolve({ emails, errors });
           });
@@ -148,7 +227,18 @@ async function fetchEmailsFromChannel(channel: EmailChannelConfig): Promise<{
     });
 
     imap.once("error", (err: Error) => {
-      errors.push(`IMAP connection error: ${err.message}`);
+      const error = `IMAP connection error: ${err.message}`;
+      errors.push(error);
+      emailLogger.error(error, {
+        channelId: channel.id,
+        channelName,
+        duration: Date.now() - startTime,
+        details: {
+          error: err.message,
+          host: channel.imapHost,
+          port: channel.imapPort,
+        },
+      });
       resolve({ emails, errors });
     });
 
@@ -299,6 +389,7 @@ async function processEmail(email: ParsedMail, channelId: string): Promise<{
  * Fetch emails from all active email channels
  */
 export async function fetchAllEmails(): Promise<FetchResult> {
+  const startTime = Date.now();
   const result: FetchResult = {
     success: true,
     newTickets: 0,
@@ -307,6 +398,8 @@ export async function fetchAllEmails(): Promise<FetchResult> {
   };
 
   try {
+    await emailLogger.info("Starting email fetch for all channels");
+
     // Get all active email channels with IMAP configured
     const channels = await prisma.emailChannel.findMany({
       where: {
@@ -317,9 +410,15 @@ export async function fetchAllEmails(): Promise<FetchResult> {
     });
 
     if (channels.length === 0) {
-      result.errors.push("No email channels with IMAP configured");
+      const error = "No email channels with IMAP configured";
+      result.errors.push(error);
+      await emailLogger.warn(error);
       return result;
     }
+
+    await emailLogger.info(`Found ${channels.length} active email channel(s)`, {
+      details: { channelCount: channels.length },
+    });
 
     for (const channel of channels) {
       console.log(`Fetching emails for ${channel.email}...`);
@@ -344,11 +443,26 @@ export async function fetchAllEmails(): Promise<FetchResult> {
       }
     }
 
+    const duration = Date.now() - startTime;
+    await emailLogger.info(`Email fetch completed: ${result.newTickets} new tickets, ${result.newMessages} new messages`, {
+      duration,
+      details: {
+        newTickets: result.newTickets,
+        newMessages: result.newMessages,
+        errorCount: result.errors.length,
+      },
+    });
+
     return result;
   } catch (error) {
     console.error("Email fetch failed:", error);
     result.success = false;
-    result.errors.push(error instanceof Error ? error.message : "Unknown error");
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    result.errors.push(errorMessage);
+    await emailLogger.error(`Email fetch failed: ${errorMessage}`, {
+      duration: Date.now() - startTime,
+      details: { error: errorMessage },
+    });
     return result;
   }
 }
@@ -357,6 +471,7 @@ export async function fetchAllEmails(): Promise<FetchResult> {
  * Fetch emails from a specific channel by ID
  */
 export async function fetchEmailsFromChannelById(channelId: string): Promise<FetchResult> {
+  const startTime = Date.now();
   const result: FetchResult = {
     success: true,
     newTickets: 0,
@@ -371,15 +486,30 @@ export async function fetchEmailsFromChannelById(channelId: string): Promise<Fet
 
     if (!channel) {
       result.success = false;
-      result.errors.push("Email channel not found");
+      const error = "Email channel not found";
+      result.errors.push(error);
+      await emailLogger.error(error, { channelId });
       return result;
     }
 
+    const channelName = channel.name || channel.email;
+
     if (!channel.imapHost || !channel.imapPort) {
       result.success = false;
-      result.errors.push("IMAP not configured for this channel");
+      const error = "IMAP not configured for this channel";
+      result.errors.push(error);
+      await emailLogger.warn(error, {
+        channelId: channel.id,
+        channelName,
+        details: { imapHost: channel.imapHost, imapPort: channel.imapPort },
+      });
       return result;
     }
+
+    await emailLogger.info(`Starting email fetch for ${channelName}`, {
+      channelId: channel.id,
+      channelName,
+    });
 
     console.log(`Fetching emails for ${channel.email}...`);
 
@@ -402,11 +532,29 @@ export async function fetchEmailsFromChannelById(channelId: string): Promise<Fet
       }
     }
 
+    const duration = Date.now() - startTime;
+    await emailLogger.info(`Fetch completed for ${channelName}: ${result.newTickets} new tickets, ${result.newMessages} new messages`, {
+      channelId: channel.id,
+      channelName,
+      duration,
+      details: {
+        newTickets: result.newTickets,
+        newMessages: result.newMessages,
+        errorCount: result.errors.length,
+      },
+    });
+
     return result;
   } catch (error) {
     console.error("Email fetch failed:", error);
     result.success = false;
-    result.errors.push(error instanceof Error ? error.message : "Unknown error");
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    result.errors.push(errorMessage);
+    await emailLogger.error(`Email fetch failed: ${errorMessage}`, {
+      channelId,
+      duration: Date.now() - startTime,
+      details: { error: errorMessage },
+    });
     return result;
   }
 }
