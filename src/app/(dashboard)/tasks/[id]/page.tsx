@@ -70,6 +70,7 @@ export default async function TaskDetailPage({
   const serializedTask = {
     ...task,
     dueDate: task.dueDate?.toISOString() || null,
+    completedAt: task.completedAt?.toISOString() || null,
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString(),
     notes: task.notes.map((note) => ({
