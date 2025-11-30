@@ -16,8 +16,34 @@ interface Agent {
   email: string;
   role: string;
   avatar: string | null;
+  isAiAgent: boolean;
+  jobTitle: string | null;
   createdAt: Date;
   ticketCount: number;
+  taskCount: number;
+}
+
+// Claude AI Avatar component - Anthropic-style with sparkle/starburst
+function ClaudeAvatar({ className = "w-8 h-8" }: { className?: string }) {
+  return (
+    <div className={`${className} rounded-full bg-gradient-to-br from-orange-400 via-amber-500 to-orange-600 flex items-center justify-center shadow-sm ring-2 ring-orange-200`}>
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        className="w-5 h-5"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        {/* Claude-style starburst/sparkle icon */}
+        <path
+          d="M12 2L13.09 8.26L18 5L14.74 10.91L21 12L14.74 13.09L18 19L13.09 15.74L12 22L10.91 15.74L6 19L9.26 13.09L3 12L9.26 10.91L6 5L10.91 8.26L12 2Z"
+          fill="white"
+          stroke="white"
+          strokeWidth="0.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  );
 }
 
 interface AgentsListProps {
@@ -135,6 +161,9 @@ export function AgentsList({ initialAgents }: AgentsListProps) {
                 Tickets
               </th>
               <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Tasks
+              </th>
+              <th className="text-left py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Created
               </th>
               <th className="text-right py-3 px-4 text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -144,10 +173,12 @@ export function AgentsList({ initialAgents }: AgentsListProps) {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {agents.map((agent) => (
-              <tr key={agent.id} className="hover:bg-gray-50">
+              <tr key={agent.id} className={`hover:bg-gray-50 ${agent.isAiAgent ? "bg-orange-50/50" : ""}`}>
                 <td className="py-3 px-4">
                   <div className="flex items-center gap-3">
-                    {agent.avatar ? (
+                    {agent.isAiAgent ? (
+                      <ClaudeAvatar />
+                    ) : agent.avatar ? (
                       <img
                         src={agent.avatar}
                         alt={agent.name || "Agent"}
@@ -159,53 +190,72 @@ export function AgentsList({ initialAgents }: AgentsListProps) {
                       </div>
                     )}
                     <div>
-                      <div className="font-medium text-gray-900">
+                      <div className="font-medium text-gray-900 flex items-center gap-2">
                         {agent.name || "Unnamed"}
+                        {agent.isAiAgent && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-orange-100 text-orange-700 border border-orange-200">
+                            AI
+                          </span>
+                        )}
                       </div>
-                      <div className="text-sm text-gray-500">{agent.email}</div>
+                      <div className="text-sm text-gray-500">
+                        {agent.jobTitle || agent.email}
+                      </div>
                     </div>
                   </div>
                 </td>
                 <td className="py-3 px-4">
                   <span
                     className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                      agent.role === "ADMIN"
+                      agent.isAiAgent
+                        ? "bg-orange-100 text-orange-800"
+                        : agent.role === "ADMIN"
                         ? "bg-purple-100 text-purple-800"
                         : "bg-gray-100 text-gray-800"
                     }`}
                   >
-                    {agent.role}
+                    {agent.isAiAgent ? "AI AGENT" : agent.role}
                   </span>
                 </td>
                 <td className="py-3 px-4 text-sm text-gray-600">
                   {agent.ticketCount}
                 </td>
                 <td className="py-3 px-4 text-sm text-gray-600">
+                  {agent.taskCount}
+                </td>
+                <td className="py-3 px-4 text-sm text-gray-600">
                   {new Date(agent.createdAt).toLocaleDateString()}
                 </td>
                 <td className="py-3 px-4">
                   <div className="flex items-center justify-end gap-2">
-                    <Link
-                      href={`/admin/team/agents/${agent.id}`}
-                      className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                      title="Edit"
-                    >
-                      <PencilIcon className="w-4 h-4" />
-                    </Link>
-                    <button
-                      onClick={() => handleDelete(agent)}
-                      className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                      title="Delete"
-                    >
-                      <TrashIcon className="w-4 h-4" />
-                    </button>
+                    {!agent.isAiAgent && (
+                      <>
+                        <Link
+                          href={`/admin/team/agents/${agent.id}`}
+                          className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                          title="Edit"
+                        >
+                          <PencilIcon className="w-4 h-4" />
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(agent)}
+                          className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                          title="Delete"
+                        >
+                          <TrashIcon className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
+                    {agent.isAiAgent && (
+                      <span className="text-xs text-gray-400 italic">System Agent</span>
+                    )}
                   </div>
                 </td>
               </tr>
             ))}
             {agents.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-8 text-center text-gray-500">
+                <td colSpan={6} className="py-8 text-center text-gray-500">
                   No agents found. Add your first agent to get started.
                 </td>
               </tr>

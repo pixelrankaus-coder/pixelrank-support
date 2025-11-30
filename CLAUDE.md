@@ -324,6 +324,123 @@ const tickets = await prisma.ticket.findMany({
 
 ---
 
+## Troubleshooting Rules (Lessons Learned)
+
+### Debugging Approach
+1. **Ask about infrastructure first** - When something works locally but fails in production, immediately ask:
+   - "What hosting provider are you using?" (DigitalOcean, AWS, Vercel, etc.)
+   - "Does this work locally but fail on the server?"
+   - Check for known provider limitations before diving into code fixes
+
+2. **Don't assume code is the problem** - Infrastructure issues are common:
+   - Cloud providers often block SMTP ports (25, 465, 587)
+   - Firewall rules may differ between environments
+   - DNS, SSL, and network configurations vary by host
+
+3. **Test both environments early** - When implementing features that involve external services:
+   - Test locally first
+   - Deploy and test on production immediately
+   - Don't wait until "everything is done" to test production
+
+### Production Deployment (DigitalOcean)
+- **Server**: `134.199.165.188`
+- **App Path**: `/var/www/pixelrank-support`
+- **Process Manager**: PM2 (`pm2 restart pixelrank-support`)
+- **SMTP is blocked** - DigitalOcean blocks all outbound SMTP ports (25, 465, 587, 2525) by default for spam prevention. Use Mailgun HTTP API instead (port 443 works).
+- **Deploy script**: `powershell -ExecutionPolicy Bypass -File deploy.ps1`
+
+### Email Configuration
+- **Primary**: Mailgun HTTP API (bypasses SMTP port blocking)
+- **Fallback**: SMTP via Nodemailer (works locally, may fail on cloud hosts)
+- **Incoming**: IMAP on port 993 (works on DigitalOcean)
+- **Domain**: `tickets.pixelrank.com.au`
+
+### Mailgun Specifics
+- **API keys do NOT start with `key-`** - They look like: `xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx-xxxxxxxx-xxxxxxxx`
+- **Find API key at**: Settings → API Security (NOT Domain settings → Sending keys)
+- **API endpoint**: `https://api.mailgun.net/v3` (US) or `https://api.eu.mailgun.net/v3` (EU)
+
+### Error Messages Should Be Helpful
+When building error handling, include:
+- What went wrong
+- Possible causes (especially infrastructure issues)
+- Suggested fixes
+- Example: "SMTP timed out. If on DigitalOcean/AWS, SMTP ports may be blocked. Use Mailgun HTTP API."
+
+---
+
+## Continuous Improvement
+
+When we encounter issues, add learnings here:
+- Infrastructure gotchas
+- Provider-specific limitations
+- Debugging patterns that worked
+- Error messages that could be clearer
+
+---
+
+## Claude Agent Integration
+
+### Overview
+Claude can act as an AI agent in the system, creating tasks and notes via API. All AI-generated content is tracked with:
+- `aiGenerated: true` flag
+- `aiReasoning` - Why Claude created this
+- `aiConfidence` - Confidence score (0.0-1.0)
+- `approvalStatus` - PENDING, APPROVED, REJECTED, AUTO_APPROVED
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/ai-agent/tasks` | POST | Create a task via AI |
+| `/api/ai-agent/tasks` | GET | List AI-generated tasks |
+| `/api/ai-agent/notes` | POST | Add a note to a task |
+| `/api/ai-agent/actions` | GET | List AI action logs |
+| `/api/ai-agent/actions/[id]` | PATCH | Approve/reject an action |
+| `/api/ai-agent/config` | GET/PATCH | AI confidence configuration |
+
+### Authentication
+AI agent endpoints use Bearer token authentication:
+```bash
+Authorization: Bearer <AI_AGENT_API_KEY>
+```
+
+Set `AI_AGENT_API_KEY` in environment variables.
+
+### Creating a Task via AI
+```typescript
+POST /api/ai-agent/tasks
+{
+  "title": "Follow up with client",
+  "description": "Schedule call to discuss project status",
+  "priority": "MEDIUM",
+  "dueDate": "2025-01-15T09:00:00Z",
+  "ticketId": "clxxx...",
+  "aiReasoning": "Client requested follow-up in ticket conversation",
+  "aiConfidence": 0.85,
+  "aiModel": "claude-sonnet-4-5-20250929"
+}
+```
+
+### Approval Workflow
+1. Tasks created with confidence >= 0.85 can be auto-approved (if enabled)
+2. Lower confidence tasks go to PENDING status
+3. Admins can approve/reject via `/api/ai-agent/actions/[id]`
+
+### Key Files
+- `src/lib/ai-agent.ts` - AI agent helper functions
+- `src/app/api/ai-agent/` - API routes
+- `src/components/ai/ai-badge.tsx` - AI badge component
+- `prisma/schema.prisma` - `AIActionLog`, `AIConfidenceConfig` models
+
+### Claude System User
+- Email: `claude@ai.system`
+- ID: `claude-ai-agent-9999`
+- `isAiAgent: true`
+- Created by seed script
+
+---
+
 ## Quick Reference
 
 | Task | Command |

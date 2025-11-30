@@ -3,17 +3,23 @@ import { AgentsList } from "./agents-list";
 
 async function getAgents() {
   const agents = await prisma.user.findMany({
-    orderBy: { createdAt: "desc" },
+    orderBy: [
+      { isAiAgent: "desc" }, // AI agents first
+      { createdAt: "desc" },
+    ],
     select: {
       id: true,
       name: true,
       email: true,
       role: true,
       avatar: true,
+      isAiAgent: true,
+      jobTitle: true,
       createdAt: true,
       _count: {
         select: {
           ticketsAssigned: true,
+          tasksCreated: true,
         },
       },
     },
@@ -25,8 +31,11 @@ async function getAgents() {
     email: agent.email,
     role: agent.role,
     avatar: agent.avatar,
+    isAiAgent: agent.isAiAgent,
+    jobTitle: agent.jobTitle,
     createdAt: agent.createdAt,
     ticketCount: agent._count.ticketsAssigned,
+    taskCount: agent._count.tasksCreated,
   }));
 }
 

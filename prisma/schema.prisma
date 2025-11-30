@@ -36,6 +36,14 @@ enum Recurrence {
   YEARLY
 }
 
+// Approval status for AI-generated content
+enum ApprovalStatus {
+  PENDING     // Awaiting human review
+  APPROVED    // Approved by human
+  REJECTED    // Rejected by human
+  AUTO_APPROVED // Auto-approved (high confidence)
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -43,6 +51,9 @@ model User {
   passwordHash String
   role         String   @default("AGENT") // AGENT, ADMIN
   createdAt    DateTime @default(now())
+
+  // AI Agent flag - true for system users like Claude
+  isAiAgent    Boolean  @default(false)
 
   // Agent profile details
   phone        String?
@@ -825,6 +836,16 @@ model Task {
   parentTask    Task?       @relation("RecurringTasks", fields: [parentTaskId], references: [id], onDelete: SetNull)
   childTasks    Task[]      @relation("RecurringTasks")
 
+  // AI-generated task fields
+  aiGenerated       Boolean         @default(false)  // Was this task created by AI?
+  aiReasoning       String?         @db.Text         // Why AI created this task
+  aiConfidence      Float?                           // Confidence score 0.0-1.0
+  aiModel           String?                          // Which AI model created this
+  aiContext         String?         @db.Text         // JSON context (ticket ID, conversation excerpt, etc.)
+  approvalStatus    ApprovalStatus  @default(PENDING)
+  approvedById      String?                          // User who approved/rejected
+  approvedAt        DateTime?                        // When approved/rejected
+
   // Notes/comments
   notes         TaskNote[]
   timeEntries   TimeEntry[]
@@ -841,6 +862,8 @@ model Task {
   @@index([contactId])
   @@index([status])
   @@index([dueDate])
+  @@index([aiGenerated])
+  @@index([approvalStatus])
 }
 
 // Task Notes/Comments
@@ -926,4 +949,68 @@ model BlazeActivityLog {
   @@index([companyId])
   @@index([eventType])
   @@index([createdAt])
+}
+
+// AI Action Log for tracking all AI agent actions (audit trail)
+model AIActionLog {
+  id            String   @id @default(cuid())
+
+  // Action details
+  action        String   // TASK_CREATED, TASK_UPDATED, NOTE_ADDED, TICKET_COMMENTED, etc.
+  entityType    String   // task, ticket, note, etc.
+  entityId      String?  // ID of the created/modified entity
+
+  // AI context
+  aiUserId      String   // The AI user who performed the action
+  aiModel       String?  // Which AI model was used
+  aiReasoning   String?  @db.Text  // Why the AI took this action
+  aiConfidence  Float?   // Confidence score 0.0-1.0
+
+  // Input/Output for debugging
+  inputContext  String?  @db.Text  // JSON: what the AI was given
+  outputData    String?  @db.Text  // JSON: what the AI produced
+
+  // Approval tracking
+  approvalStatus ApprovalStatus @default(PENDING)
+  approvedById   String?        // User who approved/rejected
+  approvedAt     DateTime?
+  rejectionReason String?       @db.Text
+
+  // Related entities
+  ticketId      String?
+  taskId        String?
+  contactId     String?
+  companyId     String?
+
+  // Metadata
+  durationMs    Int?     // How long the action took
+  success       Boolean  @default(true)
+  errorMessage  String?  @db.Text
+
+  createdAt     DateTime @default(now())
+
+  @@index([action])
+  @@index([entityType])
+  @@index([aiUserId])
+  @@index([approvalStatus])
+  @@index([ticketId])
+  @@index([taskId])
+  @@index([createdAt])
+}
+
+// AI Confidence Thresholds for auto-approval
+model AIConfidenceConfig {
+  id                    String   @id @default("default")
+
+  // Auto-approval thresholds (0.0-1.0)
+  taskAutoApprove       Float    @default(0.85)  // Auto-approve tasks above this
+  taskDraft             Float    @default(0.5)   // Below this = needs review
+  noteAutoApprove       Float    @default(0.9)   // Notes need higher confidence
+
+  // Feature toggles
+  autoApproveEnabled    Boolean  @default(false) // Master switch for auto-approval
+  requireApprovalForNew Boolean  @default(true)  // Require approval for new entities
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
