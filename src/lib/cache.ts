@@ -11,7 +11,7 @@
  *   await cache.del('key');
  */
 
-import { prisma } from "./db";
+// Cache abstraction - no DB dependency needed
 
 // In-memory cache store (for development or Redis fallback)
 const memoryCache = new Map<string, { value: string; expiresAt: number | null }>();
@@ -60,11 +60,11 @@ async function getRedisClient(): Promise<RedisClientType | null> {
 // Clean up expired entries from memory cache
 function cleanupMemoryCache(): void {
   const now = Date.now();
-  for (const [key, entry] of memoryCache.entries()) {
+  Array.from(memoryCache.entries()).forEach(([key, entry]) => {
     if (entry.expiresAt && entry.expiresAt < now) {
       memoryCache.delete(key);
     }
-  }
+  });
 }
 
 // Run cleanup every minute
@@ -181,11 +181,11 @@ export const cache = {
       const regexPattern = new RegExp(
         "^" + pattern.replace(/\*/g, ".*").replace(/\?/g, ".") + "$"
       );
-      for (const key of memoryCache.keys()) {
+      Array.from(memoryCache.keys()).forEach((key) => {
         if (regexPattern.test(key)) {
           memoryCache.delete(key);
         }
-      }
+      });
     } catch (error) {
       console.error("[Cache] Delete pattern error:", error);
     }
