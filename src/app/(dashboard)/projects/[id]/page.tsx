@@ -82,6 +82,7 @@ export default async function ProjectDetailPage({
     deliverables: project.deliverables.map((d) => ({
       ...d,
       dueDate: d.dueDate?.toISOString() || null,
+      deliveredAt: d.deliveredAt?.toISOString() || null,
       createdAt: d.createdAt.toISOString(),
       updatedAt: d.updatedAt.toISOString(),
     })),
