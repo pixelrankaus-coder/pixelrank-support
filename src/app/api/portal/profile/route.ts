@@ -16,7 +16,7 @@ export async function GET() {
         id: true,
         email: true,
         name: true,
-        phone: true,
+        workPhone: true,
         company: true,
         createdAt: true,
       },
@@ -44,20 +44,20 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const { name, phone, company } = await request.json();
+    const { name, workPhone, company } = await request.json();
 
     const contact = await prisma.contact.update({
       where: { id: session.id },
       data: {
         name: name || null,
-        phone: phone || null,
+        workPhone: workPhone || null,
         company: company || null,
       },
       select: {
         id: true,
         email: true,
         name: true,
-        phone: true,
+        workPhone: true,
         company: true,
         createdAt: true,
       },
