@@ -35,6 +35,12 @@ export default async function TicketDetailPage({
     notFound();
   }
 
+  // Serialize messages for client component
+  const serializedMessages = ticket.messages.map((msg) => ({
+    ...msg,
+    createdAt: msg.createdAt.toISOString(),
+  }));
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "OPEN":
@@ -133,7 +139,7 @@ export default async function TicketDetailPage({
       {/* Messages */}
       <TicketMessages
         ticketId={ticket.id}
-        initialMessages={ticket.messages}
+        initialMessages={serializedMessages}
         customerName={session.name || session.email}
         isClosed={ticket.status === "CLOSED"}
       />
