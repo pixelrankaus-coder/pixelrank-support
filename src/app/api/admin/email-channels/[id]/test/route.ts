@@ -341,7 +341,84 @@ async function testSmtpConnection(
   }
 }
 
-// POST /api/admin/email-channels/[id]/test - Test email channel connection (SMTP + IMAP)
+// Test Mailgun API connection
+async function testMailgunApi(
+  channelId: string,
+  channelName: string
+): Promise<{ success: boolean; message: string; duration: number }> {
+  const startTime = Date.now();
+  const apiKey = process.env.MAILGUN_API_KEY;
+  const domain = process.env.MAILGUN_DOMAIN;
+
+  if (!apiKey || !domain) {
+    return {
+      success: false,
+      message: "Mailgun API not configured (MAILGUN_API_KEY or MAILGUN_DOMAIN missing)",
+      duration: Date.now() - startTime,
+    };
+  }
+
+  await emailLogger.connection(`🔍 Testing Mailgun API for domain: ${domain}`, {
+    channelId,
+    channelName,
+  });
+
+  try {
+    // Test API connectivity by fetching domain info
+    const baseUrl = process.env.MAILGUN_EU === "true"
+      ? "https://api.eu.mailgun.net/v3"
+      : "https://api.mailgun.net/v3";
+
+    const response = await fetch(`${baseUrl}/domains/${domain}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`api:${apiKey}`).toString("base64")}`,
+      },
+    });
+
+    const duration = Date.now() - startTime;
+
+    if (response.ok) {
+      await emailLogger.connection(`✅ Mailgun API connected successfully (${formatDuration(duration)})`, {
+        channelId,
+        channelName,
+        duration,
+      });
+      return {
+        success: true,
+        message: `Mailgun API ready! Domain ${domain} verified. Emails will be sent via Mailgun HTTP API.`,
+        duration,
+      };
+    } else {
+      const errorText = await response.text();
+      await emailLogger.error(`❌ Mailgun API error: ${response.status} - ${errorText}`, {
+        channelId,
+        channelName,
+        duration,
+      });
+      return {
+        success: false,
+        message: `Mailgun API error (${response.status}): ${errorText}`,
+        duration,
+      };
+    }
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    await emailLogger.error(`❌ Mailgun API request failed: ${errorMessage}`, {
+      channelId,
+      channelName,
+      duration,
+    });
+    return {
+      success: false,
+      message: `Mailgun API connection failed: ${errorMessage}`,
+      duration,
+    };
+  }
+}
+
+// POST /api/admin/email-channels/[id]/test - Test email channel connection (Mailgun/SMTP + IMAP)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -370,7 +447,11 @@ export async function POST(
     }
 
     channelName = channel.name || channel.email;
-    const results: { smtp?: { success: boolean; message: string }; imap?: { success: boolean; message: string } } = {};
+    const results: {
+      mailgun?: { success: boolean; message: string };
+      smtp?: { success: boolean; message: string };
+      imap?: { success: boolean; message: string }
+    } = {};
 
     await emailLogger.info(`🔍 ═══════════════════════════════════════════════════`, {
       channelId: channel.id,
@@ -385,7 +466,33 @@ export async function POST(
       channelName,
     });
 
-    // Test SMTP if configured
+    // Test Mailgun API first (preferred for cloud hosts)
+    const hasMailgun = process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN;
+    if (hasMailgun) {
+      await emailLogger.info(`\n📧 ─── MAILGUN API TEST (Outgoing Mail - Primary) ───`, {
+        channelId: channel.id,
+        channelName,
+      });
+
+      const mailgunResult = await testMailgunApi(channel.id, channelName);
+      results.mailgun = { success: mailgunResult.success, message: mailgunResult.message };
+
+      if (mailgunResult.success) {
+        await emailLogger.connection(`\n✅ MAILGUN TEST PASSED in ${formatDuration(mailgunResult.duration)}`, {
+          channelId: channel.id,
+          channelName,
+          duration: mailgunResult.duration,
+        });
+      } else {
+        await emailLogger.error(`\n❌ MAILGUN TEST FAILED after ${formatDuration(mailgunResult.duration)}`, {
+          channelId: channel.id,
+          channelName,
+          duration: mailgunResult.duration,
+        });
+      }
+    }
+
+    // Test SMTP if configured (fallback or if Mailgun not configured)
     if (channel.smtpHost && channel.smtpPort) {
       await emailLogger.info(`\n📤 ─── SMTP TEST (Outgoing Mail) ───`, {
         channelId: channel.id,
@@ -509,7 +616,12 @@ export async function POST(
     }
 
     const totalDuration = Date.now() - startTime;
-    const overallSuccess = (results.smtp?.success || !channel.smtpHost) && (results.imap?.success || !channel.imapHost);
+
+    // For outgoing mail: Mailgun OR SMTP must work (or neither configured)
+    const outgoingWorks = results.mailgun?.success || results.smtp?.success || (!hasMailgun && !channel.smtpHost);
+    // For incoming mail: IMAP must work (or not configured)
+    const incomingWorks = results.imap?.success || !channel.imapHost;
+    const overallSuccess = outgoingWorks && incomingWorks;
 
     // Summary log
     await emailLogger.info(`\n🔍 ═══════════════════════════════════════════════════`, {
@@ -525,6 +637,7 @@ export async function POST(
         channelName,
         duration: totalDuration,
         details: {
+          mailgun: results.mailgun?.success ? "✓ PASSED" : results.mailgun?.message || "not configured",
           smtp: results.smtp?.success ? "✓ PASSED" : results.smtp?.message || "not tested",
           imap: results.imap?.success ? "✓ PASSED" : results.imap?.message || "not tested",
         },
@@ -537,8 +650,13 @@ export async function POST(
 
     // Build response message
     const messages: string[] = [];
+    if (results.mailgun) {
+      messages.push(`Mailgun API: ${results.mailgun.success ? "✓" : "✗"} ${results.mailgun.message}`);
+    }
     if (results.smtp) {
-      messages.push(`SMTP: ${results.smtp.success ? "✓" : "✗"} ${results.smtp.message}`);
+      // If Mailgun works, SMTP failure is just informational
+      const prefix = results.mailgun?.success ? "SMTP (fallback)" : "SMTP";
+      messages.push(`${prefix}: ${results.smtp.success ? "✓" : "✗"} ${results.smtp.message}`);
     }
     if (results.imap) {
       messages.push(`IMAP: ${results.imap.success ? "✓" : "✗"} ${results.imap.message}`);
