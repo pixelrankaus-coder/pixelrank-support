@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, TaskStatus, DeliverableStatus } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -185,7 +185,11 @@ async function main() {
   for (const task of taskData) {
     await prisma.task.create({
       data: {
-        ...task,
+        title: task.title,
+        projectId: task.projectId,
+        status: task.status as TaskStatus,
+        priority: task.priority,
+        dueDate: task.dueDate,
         assigneeId: admin.id,
         createdById: admin.id,
         companyId: projects.find(p => p.id === task.projectId)?.companyId || null,
