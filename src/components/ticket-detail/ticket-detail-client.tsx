@@ -11,6 +11,7 @@ import { TicketTimeline } from "./ticket-timeline";
 import { PresenceIndicator } from "./presence-indicator";
 import { CollisionWarning } from "./collision-warning";
 import { AIAssistPanel } from "./ai-assist-panel";
+import { AskClaudePanel } from "./ask-claude-panel";
 import { CreateTaskModal } from "./create-task-modal";
 import { updateTicket, deleteTicket } from "@/lib/actions";
 import { cn, getStatusColor, getPriorityColor } from "@/lib/utils";
@@ -228,13 +229,16 @@ export function TicketDetailClient({
                 createdAt={ticket.createdAt}
               />
 
-              {/* AI Assist Panel */}
-              <AIAssistPanel
-                ticketId={ticket.id}
-                hasExistingAI={!!ticket.aiSummary}
-                initialData={initialAIData}
-                onInsertReply={handleInsertAIReply}
-              />
+              {/* AI Panels - side by side buttons when collapsed */}
+              <div className="flex flex-wrap gap-2 items-start">
+                <AIAssistPanel
+                  ticketId={ticket.id}
+                  hasExistingAI={!!ticket.aiSummary}
+                  initialData={initialAIData}
+                  onInsertReply={handleInsertAIReply}
+                />
+                <AskClaudePanel ticketId={ticket.id} />
+              </div>
 
               {/* Reply composer */}
               <div id="reply-composer" className="space-y-3">

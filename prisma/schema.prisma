@@ -1014,3 +1014,65 @@ model AIConfidenceConfig {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
+
+// Chat Conversations - Reusable for Claude chat and future chatbot integration
+model ChatConversation {
+  id            String   @id @default(cuid())
+
+  // Conversation type: CLAUDE_CHAT (internal AI assistant), CHATBOT (customer-facing)
+  type          String   @default("CLAUDE_CHAT")
+
+  // For internal Claude chat
+  userId        String?  // The agent having the conversation
+
+  // For customer chatbot
+  contactId     String?  // The customer having the conversation
+  visitorId     String?  // Anonymous visitor ID before identification
+
+  // Conversation status
+  status        String   @default("ACTIVE") // ACTIVE, CLOSED, ARCHIVED
+
+  // Optional context
+  ticketId      String?  // If the chat is about a specific ticket
+
+  // Metadata
+  title         String?  // Auto-generated or user-set title
+
+  messages      ChatMessage[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([contactId])
+  @@index([type])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Chat Messages within a conversation
+model ChatMessage {
+  id              String   @id @default(cuid())
+
+  conversationId  String
+  conversation    ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  // Message content
+  role            String   // USER, ASSISTANT, SYSTEM
+  content         String   @db.Text
+
+  // AI metadata (for assistant messages)
+  aiModel         String?  // Which model generated this
+  tokensUsed      Int?     // Total tokens for this message
+
+  // For action messages (when Claude takes action)
+  actionType      String?  // TASK_CREATED, TICKET_CREATED, etc.
+  actionData      String?  @db.Text // JSON with action details
+  actionLogId     String?  // Link to AIActionLog for traceability
+
+  createdAt       DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([role])
+  @@index([createdAt])
+}

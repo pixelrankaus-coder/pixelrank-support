@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { IconBar } from "@/components/icon-bar";
 import { HeaderWrapper } from "@/components/header";
+import { ClaudeChatWrapper } from "@/components/ai/claude-chat-wrapper";
 
 export default async function DashboardLayout({
   children,
@@ -27,6 +28,9 @@ export default async function DashboardLayout({
         {/* Page content */}
         <div className="flex-1">{children}</div>
       </div>
+
+      {/* Claude AI Chat - Floating button and panel */}
+      <ClaudeChatWrapper />
     </div>
   );
 }

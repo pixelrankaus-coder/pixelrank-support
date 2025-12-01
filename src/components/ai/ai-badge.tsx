@@ -2,6 +2,52 @@
 
 import { ApprovalStatus } from '@prisma/client'
 
+/**
+ * Claude AI Avatar - Anthropic-style orange gradient with sparkle/starburst icon
+ * Reusable across the app for consistent Claude branding
+ */
+interface ClaudeAvatarProps {
+  className?: string
+  size?: 'xs' | 'sm' | 'md' | 'lg'
+}
+
+const sizeClasses = {
+  xs: 'w-5 h-5',
+  sm: 'w-6 h-6',
+  md: 'w-8 h-8',
+  lg: 'w-10 h-10',
+}
+
+const iconSizeClasses = {
+  xs: 'w-3 h-3',
+  sm: 'w-4 h-4',
+  md: 'w-5 h-5',
+  lg: 'w-6 h-6',
+}
+
+export function ClaudeAvatar({ className = '', size = 'md' }: ClaudeAvatarProps) {
+  return (
+    <div
+      className={`${sizeClasses[size]} ${className} rounded-full bg-gradient-to-br from-orange-400 via-amber-500 to-orange-600 flex items-center justify-center shadow-sm flex-shrink-0`}
+    >
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        className={iconSizeClasses[size]}
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M12 2L13.09 8.26L18 5L14.74 10.91L21 12L14.74 13.09L18 19L13.09 15.74L12 22L10.91 15.74L6 19L9.26 13.09L3 12L9.26 10.91L6 5L10.91 8.26L12 2Z"
+          fill="white"
+          stroke="white"
+          strokeWidth="0.5"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </div>
+  )
+}
+
 interface AIBadgeProps {
   aiGenerated?: boolean
   approvalStatus?: ApprovalStatus

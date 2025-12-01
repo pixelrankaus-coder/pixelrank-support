@@ -42,6 +42,33 @@ export interface AINoteInput {
   aiModel?: string
 }
 
+export interface AITicketReplyInput {
+  ticketId: string
+  body: string
+  internal?: boolean // True for private/internal notes
+  // AI metadata
+  aiReasoning: string
+  aiConfidence: number
+  aiModel?: string
+  aiContext?: Record<string, unknown>
+}
+
+export interface AITicketCreateInput {
+  subject: string
+  description?: string
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT'
+  contactEmail?: string // Email of existing contact, or will create new
+  contactName?: string  // Name for new contact
+  assigneeId?: string
+  groupId?: string
+  source?: string
+  // AI metadata
+  aiReasoning: string
+  aiConfidence: number
+  aiModel?: string
+  aiContext?: Record<string, unknown>
+}
+
 export interface AIActionResult<T = unknown> {
   success: boolean
   data?: T
@@ -517,5 +544,270 @@ export async function getAIActionStats(options?: {
     rejected,
     autoApproved,
     approvalRate: total > 0 ? ((approved + autoApproved) / total * 100).toFixed(1) : '0',
+  }
+}
+
+/**
+ * Create a ticket reply/message via AI agent
+ * Supports both public replies and internal notes
+ */
+export async function createAITicketReply(input: AITicketReplyInput): Promise<AIActionResult> {
+  const startTime = Date.now()
+
+  try {
+    // Get or create Claude user
+    const claudeUser = await getOrCreateClaudeUser()
+
+    // Verify ticket exists
+    const ticket = await prisma.ticket.findUnique({
+      where: { id: input.ticketId },
+      select: {
+        id: true,
+        ticketNumber: true,
+        subject: true,
+        contactId: true,
+        assigneeId: true,
+      }
+    })
+
+    if (!ticket) {
+      throw new Error(`Ticket not found: ${input.ticketId}`)
+    }
+
+    // Determine approval status based on confidence
+    // Use 'note' threshold for replies (similar sensitivity)
+    const approvalStatus = await determineApprovalStatus(input.aiConfidence, 'note')
+
+    // Create the message
+    const message = await prisma.ticketMessage.create({
+      data: {
+        ticketId: input.ticketId,
+        body: input.body,
+        internal: input.internal ?? false,
+        authorType: 'AGENT',
+        authorId: claudeUser.id,
+        authorName: claudeUser.name || 'Claude AI',
+        agentAuthorId: claudeUser.id,
+      },
+      include: {
+        agentAuthor: {
+          select: { id: true, name: true, email: true, isAiAgent: true }
+        },
+        ticket: {
+          select: { id: true, ticketNumber: true, subject: true }
+        }
+      }
+    })
+
+    // Update ticket's updatedAt timestamp
+    await prisma.ticket.update({
+      where: { id: input.ticketId },
+      data: { updatedAt: new Date() }
+    })
+
+    // Log the action
+    const actionLog = await logAIAction({
+      action: input.internal ? 'INTERNAL_NOTE_ADDED' : 'TICKET_REPLY_SENT',
+      entityType: 'ticket_message',
+      entityId: message.id,
+      aiUserId: claudeUser.id,
+      aiModel: input.aiModel,
+      aiReasoning: input.aiReasoning,
+      aiConfidence: input.aiConfidence,
+      inputContext: input as unknown as Record<string, unknown>,
+      outputData: {
+        messageId: message.id,
+        ticketId: input.ticketId,
+        ticketNumber: ticket.ticketNumber,
+        internal: input.internal ?? false,
+      },
+      approvalStatus,
+      ticketId: input.ticketId,
+      contactId: ticket.contactId || undefined,
+      durationMs: Date.now() - startTime,
+      success: true,
+    })
+
+    return {
+      success: true,
+      data: message,
+      approvalStatus,
+      actionLogId: actionLog.id,
+    }
+  } catch (error) {
+    const claudeUser = await getOrCreateClaudeUser().catch(() => null)
+
+    // Log failed action
+    if (claudeUser) {
+      await logAIAction({
+        action: input.internal ? 'INTERNAL_NOTE_ADDED' : 'TICKET_REPLY_SENT',
+        entityType: 'ticket_message',
+        aiUserId: claudeUser.id,
+        aiModel: input.aiModel,
+        aiReasoning: input.aiReasoning,
+        aiConfidence: input.aiConfidence,
+        inputContext: input as unknown as Record<string, unknown>,
+        approvalStatus: 'PENDING',
+        ticketId: input.ticketId,
+        durationMs: Date.now() - startTime,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      }).catch(console.error)
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      approvalStatus: 'PENDING',
+    }
+  }
+}
+
+/**
+ * Helper to get next ticket number
+ */
+async function getNextTicketNumber(): Promise<number> {
+  const counter = await prisma.counter.upsert({
+    where: { id: 'ticket_number' },
+    update: { value: { increment: 1 } },
+    create: { id: 'ticket_number', value: 1 },
+  })
+  return counter.value
+}
+
+/**
+ * Create a new ticket via AI agent
+ * Can optionally link to existing contact or create new one
+ */
+export async function createAITicket(input: AITicketCreateInput): Promise<AIActionResult> {
+  const startTime = Date.now()
+
+  try {
+    // Get or create Claude user
+    const claudeUser = await getOrCreateClaudeUser()
+
+    // Determine approval status based on confidence
+    const approvalStatus = await determineApprovalStatus(input.aiConfidence, 'task')
+
+    // Find or create contact if email provided
+    let contactId: string | undefined
+    if (input.contactEmail) {
+      let contact = await prisma.contact.findUnique({
+        where: { email: input.contactEmail }
+      })
+
+      if (!contact) {
+        // Create new contact
+        contact = await prisma.contact.create({
+          data: {
+            email: input.contactEmail,
+            name: input.contactName || null,
+          }
+        })
+      }
+      contactId = contact.id
+    }
+
+    // Get next ticket number
+    const ticketNumber = await getNextTicketNumber()
+
+    // Create the ticket
+    const ticket = await prisma.ticket.create({
+      data: {
+        ticketNumber,
+        subject: input.subject,
+        description: input.description,
+        priority: input.priority || 'MEDIUM',
+        status: 'OPEN',
+        source: input.source || 'AI_GENERATED',
+        contactId,
+        assigneeId: input.assigneeId,
+        groupId: input.groupId,
+        createdById: claudeUser.id,
+      },
+      include: {
+        contact: {
+          select: { id: true, name: true, email: true }
+        },
+        assignee: {
+          select: { id: true, name: true, email: true }
+        },
+        group: {
+          select: { id: true, name: true }
+        },
+        createdBy: {
+          select: { id: true, name: true, email: true, isAiAgent: true }
+        }
+      }
+    })
+
+    // Add the description as the first message if provided
+    if (input.description) {
+      await prisma.ticketMessage.create({
+        data: {
+          ticketId: ticket.id,
+          body: input.description,
+          internal: false,
+          authorType: 'AGENT',
+          authorId: claudeUser.id,
+          authorName: claudeUser.name || 'Claude AI',
+          agentAuthorId: claudeUser.id,
+        }
+      })
+    }
+
+    // Log the action
+    const actionLog = await logAIAction({
+      action: 'TICKET_CREATED',
+      entityType: 'ticket',
+      entityId: ticket.id,
+      aiUserId: claudeUser.id,
+      aiModel: input.aiModel,
+      aiReasoning: input.aiReasoning,
+      aiConfidence: input.aiConfidence,
+      inputContext: input as unknown as Record<string, unknown>,
+      outputData: {
+        ticketId: ticket.id,
+        ticketNumber: ticket.ticketNumber,
+        subject: ticket.subject,
+      },
+      approvalStatus,
+      ticketId: ticket.id,
+      contactId: contactId,
+      durationMs: Date.now() - startTime,
+      success: true,
+    })
+
+    return {
+      success: true,
+      data: ticket,
+      approvalStatus,
+      actionLogId: actionLog.id,
+    }
+  } catch (error) {
+    const claudeUser = await getOrCreateClaudeUser().catch(() => null)
+
+    // Log failed action
+    if (claudeUser) {
+      await logAIAction({
+        action: 'TICKET_CREATED',
+        entityType: 'ticket',
+        aiUserId: claudeUser.id,
+        aiModel: input.aiModel,
+        aiReasoning: input.aiReasoning,
+        aiConfidence: input.aiConfidence,
+        inputContext: input as unknown as Record<string, unknown>,
+        approvalStatus: 'PENDING',
+        durationMs: Date.now() - startTime,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      }).catch(console.error)
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      approvalStatus: 'PENDING',
+    }
   }
 }

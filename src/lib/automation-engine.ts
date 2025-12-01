@@ -1,4 +1,5 @@
 import { prisma } from "./db";
+import { createAITicketReply, getOrCreateClaudeUser } from "./ai-agent";
 
 interface Condition {
   field: string;
@@ -350,6 +351,91 @@ async function executeAction(
         success: true,
         description: `Email notification queued`,
       };
+    }
+
+    case "TRIGGER_AI_ANALYSIS": {
+      // Trigger Claude AI to analyze the ticket and create an internal note
+      try {
+        // Get full ticket data including messages for context
+        const fullTicket = await prisma.ticket.findUnique({
+          where: { id: ticket.id },
+          include: {
+            contact: true,
+            messages: {
+              orderBy: { createdAt: "asc" },
+              take: 10,
+            },
+          },
+        });
+
+        if (!fullTicket) {
+          return {
+            success: false,
+            description: "Ticket not found for AI analysis",
+          };
+        }
+
+        // Build context for AI analysis
+        const ticketContext = {
+          subject: fullTicket.subject,
+          description: fullTicket.description,
+          priority: fullTicket.priority,
+          status: fullTicket.status,
+          source: fullTicket.source,
+          contactName: fullTicket.contact?.name,
+          contactEmail: fullTicket.contact?.email,
+          messageCount: fullTicket.messages.length,
+          latestMessages: fullTicket.messages.slice(-3).map((m) => ({
+            body: m.body.substring(0, 500),
+            authorType: m.authorType,
+            createdAt: m.createdAt,
+          })),
+        };
+
+        // Create an AI-generated internal note with analysis
+        const analysisResult = await createAITicketReply({
+          ticketId: ticket.id,
+          body: `**AI Analysis - Auto-triggered on ticket creation**\n\n` +
+            `**Subject:** ${fullTicket.subject}\n\n` +
+            `**Summary:** This ticket was automatically flagged for AI analysis. ` +
+            `The ticket is from ${fullTicket.contact?.name || fullTicket.contact?.email || "Unknown contact"} ` +
+            `with ${fullTicket.priority} priority.\n\n` +
+            `**Suggested Actions:**\n` +
+            `- Review the ticket details and assign to appropriate team\n` +
+            `- Check if this matches any known issues or patterns\n` +
+            `- Consider priority escalation if urgent keywords detected\n\n` +
+            `*Use the "Ask Claude" feature for detailed AI-powered suggestions.*`,
+          internal: true,
+          aiReasoning: `Auto-triggered AI analysis for new ticket. Context: ${JSON.stringify(ticketContext)}`,
+          aiConfidence: 0.9,
+          aiModel: "automation-trigger",
+          aiContext: {
+            trigger: "TICKET_CREATED",
+            automationType: "AI_ANALYSIS",
+            ticketContext,
+          },
+        });
+
+        if (analysisResult.success) {
+          console.log(`[Automation] AI analysis created for ticket ${ticket.id}`);
+          return {
+            success: true,
+            description: `AI analysis note added (${analysisResult.approvalStatus})`,
+          };
+        } else {
+          console.error(`[Automation] AI analysis failed: ${analysisResult.error}`);
+          return {
+            success: false,
+            description: `AI analysis failed: ${analysisResult.error}`,
+          };
+        }
+      } catch (error) {
+        console.error("[Automation] Error triggering AI analysis:", error);
+        return {
+          success: false,
+          description: `AI analysis error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        };
+      }
     }
 
     default:

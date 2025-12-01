@@ -11,6 +11,7 @@ import {
   BookOpenIcon,
   SparklesIcon,
   ChartBarIcon,
+  ClipboardDocumentCheckIcon,
 } from "@heroicons/react/24/outline";
 
 const sidebarSections = [
@@ -55,6 +56,12 @@ const sidebarSections = [
     icon: ChartBarIcon,
     description: "Monitor AI token usage, costs, and analytics",
     href: "/admin/ai-usage",
+  },
+  {
+    name: "AI Actions",
+    icon: ClipboardDocumentCheckIcon,
+    description: "Review and approve Claude AI agent actions",
+    href: "/admin/ai-actions",
   },
   {
     name: "Support Operations",
