@@ -97,11 +97,12 @@ export async function POST(request: NextRequest) {
       });
 
       if (existingTicket) {
-        // Add reply as a message
+        // Add reply as a message - prefer HTML for rich formatting and images
+        const messageBody = emailData.html || emailData.text || "";
         await prisma.ticketMessage.create({
           data: {
             ticketId: existingTicket.id,
-            body: emailData.text || emailData.html || "",
+            body: messageBody,
             internal: false,
             authorType: "CONTACT",
             authorId: existingTicket.contactId || "unknown",
@@ -150,12 +151,15 @@ export async function POST(request: NextRequest) {
     // Get the next ticket number
     const ticketNumber = await getNextTicketNumber();
 
+    // Prefer HTML for rich formatting and images
+    const emailBody = emailData.html || emailData.text || "";
+
     // Create a new ticket
     const ticket = await prisma.ticket.create({
       data: {
         ticketNumber,
         subject: emailData.subject.replace(/^(Re:|Fwd?:)\s*/i, "").trim(),
-        description: emailData.text || emailData.html || "",
+        description: emailBody,
         priority: "MEDIUM",
         status: "OPEN",
         source: "EMAIL",
@@ -167,7 +171,7 @@ export async function POST(request: NextRequest) {
     await prisma.ticketMessage.create({
       data: {
         ticketId: ticket.id,
-        body: emailData.text || emailData.html || "",
+        body: emailBody,
         internal: false,
         authorType: "CONTACT",
         authorId: contact.id,
