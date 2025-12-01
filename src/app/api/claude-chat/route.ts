@@ -179,18 +179,48 @@ async function handleCreateTicket(
 
 // Parse Claude's response for action JSON
 function parseActionFromResponse(content: string): { action: string; data: Record<string, string> } | null {
-  // Look for JSON in the response
-  const jsonMatch = content.match(/\{[\s\S]*?"action"[\s\S]*?\}/);
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed.action && parsed.data) {
-        return parsed;
-      }
-    } catch {
-      // Not valid JSON
-    }
+  // Look for JSON containing "action" and "data" keys
+  // Try to find a complete JSON object by matching balanced braces
+  const startIndex = content.indexOf('{"action"');
+  if (startIndex === -1) {
+    // Also try with spaces: { "action"
+    const altStart = content.indexOf('{ "action"');
+    if (altStart === -1) return null;
   }
+
+  // Find the start of the JSON object
+  let jsonStart = content.indexOf('{');
+  while (jsonStart !== -1) {
+    // Try to parse from this position
+    let braceCount = 0;
+    let jsonEnd = jsonStart;
+
+    for (let i = jsonStart; i < content.length; i++) {
+      if (content[i] === '{') braceCount++;
+      if (content[i] === '}') braceCount--;
+
+      if (braceCount === 0) {
+        jsonEnd = i + 1;
+        break;
+      }
+    }
+
+    if (braceCount === 0) {
+      try {
+        const jsonStr = content.slice(jsonStart, jsonEnd);
+        const parsed = JSON.parse(jsonStr);
+        if (parsed.action && parsed.data) {
+          return parsed;
+        }
+      } catch {
+        // Not valid JSON, try next brace
+      }
+    }
+
+    // Look for next opening brace
+    jsonStart = content.indexOf('{', jsonStart + 1);
+  }
+
   return null;
 }
 
