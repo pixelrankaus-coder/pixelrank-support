@@ -164,6 +164,22 @@ export async function getAISettings() {
 }
 
 /**
+ * Check if a specific provider is enabled
+ */
+function isProviderEnabled(settings: Awaited<ReturnType<typeof getAISettings>>, provider: AIProvider): boolean {
+  switch (provider) {
+    case "anthropic":
+      return settings.anthropicEnabled ?? true;
+    case "openai":
+      return settings.openaiEnabled ?? true;
+    case "openrouter":
+      return settings.openrouterEnabled ?? true;
+    default:
+      return false;
+  }
+}
+
+/**
  * Get API key for a specific provider (from DB or env)
  */
 function getApiKey(settings: Awaited<ReturnType<typeof getAISettings>>, provider: AIProvider): string | null {
@@ -357,6 +373,13 @@ export async function generateAIResponse(options: AIRequestOptions): Promise<AIR
   // Try each provider in order
   for (let i = 0; i < providers.length; i++) {
     const provider = providers[i];
+
+    // Check if provider is enabled
+    if (!isProviderEnabled(settings, provider)) {
+      console.log(`Skipping ${provider}: provider is disabled`);
+      continue;
+    }
+
     const apiKey = getApiKey(settings, provider);
 
     if (!apiKey) {

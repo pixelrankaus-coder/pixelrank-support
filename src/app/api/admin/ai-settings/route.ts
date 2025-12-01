@@ -75,6 +75,10 @@ export async function GET() {
       hasAnthropicKey: !!settings.anthropicApiKey || !!process.env.ANTHROPIC_API_KEY,
       hasOpenaiKey: !!settings.openaiApiKey || !!process.env.OPENAI_API_KEY,
       hasOpenrouterKey: !!settings.openrouterApiKey || !!process.env.OPENROUTER_API_KEY,
+      // Per-provider enable/disable toggles
+      anthropicEnabled: settings.anthropicEnabled ?? true,
+      openaiEnabled: settings.openaiEnabled ?? true,
+      openrouterEnabled: settings.openrouterEnabled ?? true,
     });
   } catch (error) {
     console.error("Failed to fetch AI settings:", error);
@@ -104,6 +108,10 @@ export async function PUT(request: NextRequest) {
       openrouterModel,
       useFallback,
       fallbackOrder,
+      // Per-provider enable/disable toggles
+      anthropicEnabled,
+      openaiEnabled,
+      openrouterEnabled,
     } = body;
 
     // Build update data
@@ -141,6 +149,17 @@ export async function PUT(request: NextRequest) {
 
     if (fallbackOrder !== undefined) {
       updateData.fallbackOrder = fallbackOrder;
+    }
+
+    // Handle per-provider enable/disable toggles
+    if (typeof anthropicEnabled === "boolean") {
+      updateData.anthropicEnabled = anthropicEnabled;
+    }
+    if (typeof openaiEnabled === "boolean") {
+      updateData.openaiEnabled = openaiEnabled;
+    }
+    if (typeof openrouterEnabled === "boolean") {
+      updateData.openrouterEnabled = openrouterEnabled;
     }
 
     // Handle legacy apiKey - store it for the active provider

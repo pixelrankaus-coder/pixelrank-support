@@ -561,6 +561,11 @@ model AISettings {
   isEnabled         Boolean  @default(false)
   useFallback       Boolean  @default(true)  // Try next provider if primary fails
 
+  // Per-provider enable/disable toggles
+  anthropicEnabled  Boolean  @default(true)
+  openaiEnabled     Boolean  @default(true)
+  openrouterEnabled Boolean  @default(true)
+
   // Fallback order (comma-separated): "openai,openrouter"
   fallbackOrder     String   @default("openai,openrouter")
 

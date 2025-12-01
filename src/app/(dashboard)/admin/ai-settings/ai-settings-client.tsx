@@ -47,6 +47,10 @@ interface AISettings {
   hasAnthropicKey: boolean;
   hasOpenaiKey: boolean;
   hasOpenrouterKey: boolean;
+  // Per-provider enable/disable toggles
+  anthropicEnabled: boolean;
+  openaiEnabled: boolean;
+  openrouterEnabled: boolean;
   // Legacy fields for backward compatibility
   provider?: string;
   model?: string;
@@ -99,6 +103,10 @@ export function AISettingsClient() {
     isEnabled: false,
     useFallback: true,
     fallbackOrder: "openai,openrouter",
+    // Per-provider enable/disable toggles
+    anthropicEnabled: true,
+    openaiEnabled: true,
+    openrouterEnabled: true,
   });
 
   useEffect(() => {
@@ -121,6 +129,9 @@ export function AISettingsClient() {
         isEnabled: data.isEnabled || false,
         useFallback: data.useFallback ?? true,
         fallbackOrder: data.fallbackOrder || "openai,openrouter",
+        anthropicEnabled: data.anthropicEnabled ?? true,
+        openaiEnabled: data.openaiEnabled ?? true,
+        openrouterEnabled: data.openrouterEnabled ?? true,
       });
     } catch (error) {
       console.error("Failed to fetch AI settings:", error);
@@ -271,94 +282,196 @@ export function AISettingsClient() {
           <h3 className="text-lg font-medium text-gray-900 mb-4">AI Provider</h3>
           <div className="grid grid-cols-3 gap-4">
             {/* Anthropic */}
-            <button
-              type="button"
-              onClick={() => handleProviderChange("anthropic")}
+            <div
               className={`p-4 rounded-lg border-2 text-left transition-colors ${
                 formData.activeProvider === "anthropic"
                   ? "border-purple-500 bg-purple-50"
-                  : "border-gray-200 hover:border-gray-300"
+                  : !formData.anthropicEnabled
+                    ? "border-gray-200 bg-gray-100 opacity-60"
+                    : "border-gray-200 hover:border-gray-300"
               }`}
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[#D4A27F] flex items-center justify-center">
-                  <AnthropicIcon className="w-6 h-6 text-white" />
+              <div
+                className={`${formData.anthropicEnabled ? "cursor-pointer" : "cursor-not-allowed"}`}
+                onClick={() => formData.anthropicEnabled && handleProviderChange("anthropic")}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg ${formData.anthropicEnabled ? "bg-[#D4A27F]" : "bg-gray-400"} flex items-center justify-center`}>
+                    <AnthropicIcon className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className={`font-medium truncate ${formData.anthropicEnabled ? "text-gray-900" : "text-gray-500"}`}>Anthropic</div>
+                    <div className="text-xs text-gray-500">Claude Models</div>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 truncate">Anthropic</div>
-                  <div className="text-xs text-gray-500">Claude Models</div>
-                </div>
+                {settings?.hasAnthropicKey && formData.anthropicEnabled && (
+                  <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
+                    <CheckCircleIcon className="w-3 h-3" />
+                    Key configured
+                  </div>
+                )}
+                {!formData.anthropicEnabled && (
+                  <div className="mt-2 flex items-center gap-1 text-xs text-red-500">
+                    <ExclamationCircleIcon className="w-3 h-3" />
+                    Disabled
+                  </div>
+                )}
+                {formData.activeProvider === "anthropic" && formData.anthropicEnabled && (
+                  <div className="mt-2 text-xs text-purple-600 font-medium">Selected</div>
+                )}
               </div>
-              {settings?.hasAnthropicKey && (
-                <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
-                  <CheckCircleIcon className="w-3 h-3" />
-                  Key configured
-                </div>
-              )}
-              {formData.activeProvider === "anthropic" && (
-                <div className="mt-2 text-xs text-purple-600 font-medium">Selected</div>
-              )}
-            </button>
+              {/* Enable/Disable Toggle */}
+              <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
+                <span className="text-xs text-gray-500">Enable</span>
+                <label className="relative inline-flex items-center cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={formData.anthropicEnabled}
+                    onChange={(e) => {
+                      setFormData({ ...formData, anthropicEnabled: e.target.checked });
+                      // If disabling the active provider, switch to next enabled one
+                      if (!e.target.checked && formData.activeProvider === "anthropic") {
+                        if (formData.openaiEnabled) {
+                          handleProviderChange("openai");
+                        } else if (formData.openrouterEnabled) {
+                          handleProviderChange("openrouter");
+                        }
+                      }
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+            </div>
 
             {/* OpenAI */}
-            <button
-              type="button"
-              onClick={() => handleProviderChange("openai")}
+            <div
               className={`p-4 rounded-lg border-2 text-left transition-colors ${
                 formData.activeProvider === "openai"
                   ? "border-purple-500 bg-purple-50"
-                  : "border-gray-200 hover:border-gray-300"
+                  : !formData.openaiEnabled
+                    ? "border-gray-200 bg-gray-100 opacity-60"
+                    : "border-gray-200 hover:border-gray-300"
               }`}
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-[#10A37F] flex items-center justify-center">
-                  <OpenAIIcon className="w-6 h-6 text-white" />
+              <div
+                className={`${formData.openaiEnabled ? "cursor-pointer" : "cursor-not-allowed"}`}
+                onClick={() => formData.openaiEnabled && handleProviderChange("openai")}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg ${formData.openaiEnabled ? "bg-[#10A37F]" : "bg-gray-400"} flex items-center justify-center`}>
+                    <OpenAIIcon className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className={`font-medium truncate ${formData.openaiEnabled ? "text-gray-900" : "text-gray-500"}`}>OpenAI</div>
+                    <div className="text-xs text-gray-500">GPT Models</div>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 truncate">OpenAI</div>
-                  <div className="text-xs text-gray-500">GPT Models</div>
-                </div>
+                {settings?.hasOpenaiKey && formData.openaiEnabled && (
+                  <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
+                    <CheckCircleIcon className="w-3 h-3" />
+                    Key configured
+                  </div>
+                )}
+                {!formData.openaiEnabled && (
+                  <div className="mt-2 flex items-center gap-1 text-xs text-red-500">
+                    <ExclamationCircleIcon className="w-3 h-3" />
+                    Disabled
+                  </div>
+                )}
+                {formData.activeProvider === "openai" && formData.openaiEnabled && (
+                  <div className="mt-2 text-xs text-purple-600 font-medium">Selected</div>
+                )}
               </div>
-              {settings?.hasOpenaiKey && (
-                <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
-                  <CheckCircleIcon className="w-3 h-3" />
-                  Key configured
-                </div>
-              )}
-              {formData.activeProvider === "openai" && (
-                <div className="mt-2 text-xs text-purple-600 font-medium">Selected</div>
-              )}
-            </button>
+              {/* Enable/Disable Toggle */}
+              <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
+                <span className="text-xs text-gray-500">Enable</span>
+                <label className="relative inline-flex items-center cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={formData.openaiEnabled}
+                    onChange={(e) => {
+                      setFormData({ ...formData, openaiEnabled: e.target.checked });
+                      // If disabling the active provider, switch to next enabled one
+                      if (!e.target.checked && formData.activeProvider === "openai") {
+                        if (formData.anthropicEnabled) {
+                          handleProviderChange("anthropic");
+                        } else if (formData.openrouterEnabled) {
+                          handleProviderChange("openrouter");
+                        }
+                      }
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+            </div>
 
             {/* OpenRouter */}
-            <button
-              type="button"
-              onClick={() => handleProviderChange("openrouter")}
+            <div
               className={`p-4 rounded-lg border-2 text-left transition-colors ${
                 formData.activeProvider === "openrouter"
                   ? "border-purple-500 bg-purple-50"
-                  : "border-gray-200 hover:border-gray-300"
+                  : !formData.openrouterEnabled
+                    ? "border-gray-200 bg-gray-100 opacity-60"
+                    : "border-gray-200 hover:border-gray-300"
               }`}
             >
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[#6366F1] to-[#8B5CF6] flex items-center justify-center">
-                  <OpenRouterIcon className="w-6 h-6 text-white" />
+              <div
+                className={`${formData.openrouterEnabled ? "cursor-pointer" : "cursor-not-allowed"}`}
+                onClick={() => formData.openrouterEnabled && handleProviderChange("openrouter")}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg ${formData.openrouterEnabled ? "bg-gradient-to-br from-[#6366F1] to-[#8B5CF6]" : "bg-gray-400"} flex items-center justify-center`}>
+                    <OpenRouterIcon className="w-6 h-6 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className={`font-medium truncate ${formData.openrouterEnabled ? "text-gray-900" : "text-gray-500"}`}>OpenRouter</div>
+                    <div className="text-xs text-gray-500">Multi-Model Gateway</div>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 truncate">OpenRouter</div>
-                  <div className="text-xs text-gray-500">Multi-Model Gateway</div>
-                </div>
+                {settings?.hasOpenrouterKey && formData.openrouterEnabled && (
+                  <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
+                    <CheckCircleIcon className="w-3 h-3" />
+                    Key configured
+                  </div>
+                )}
+                {!formData.openrouterEnabled && (
+                  <div className="mt-2 flex items-center gap-1 text-xs text-red-500">
+                    <ExclamationCircleIcon className="w-3 h-3" />
+                    Disabled
+                  </div>
+                )}
+                {formData.activeProvider === "openrouter" && formData.openrouterEnabled && (
+                  <div className="mt-2 text-xs text-purple-600 font-medium">Selected</div>
+                )}
               </div>
-              {settings?.hasOpenrouterKey && (
-                <div className="mt-2 flex items-center gap-1 text-xs text-green-600">
-                  <CheckCircleIcon className="w-3 h-3" />
-                  Key configured
-                </div>
-              )}
-              {formData.activeProvider === "openrouter" && (
-                <div className="mt-2 text-xs text-purple-600 font-medium">Selected</div>
-              )}
-            </button>
+              {/* Enable/Disable Toggle */}
+              <div className="mt-3 pt-3 border-t border-gray-200 flex items-center justify-between">
+                <span className="text-xs text-gray-500">Enable</span>
+                <label className="relative inline-flex items-center cursor-pointer" onClick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={formData.openrouterEnabled}
+                    onChange={(e) => {
+                      setFormData({ ...formData, openrouterEnabled: e.target.checked });
+                      // If disabling the active provider, switch to next enabled one
+                      if (!e.target.checked && formData.activeProvider === "openrouter") {
+                        if (formData.anthropicEnabled) {
+                          handleProviderChange("anthropic");
+                        } else if (formData.openaiEnabled) {
+                          handleProviderChange("openai");
+                        }
+                      }
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-9 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-purple-100 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-600"></div>
+                </label>
+              </div>
+            </div>
           </div>
 
           {/* OpenRouter info */}
