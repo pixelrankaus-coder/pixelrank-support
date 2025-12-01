@@ -2,6 +2,18 @@ import { prisma } from "@/lib/db";
 
 // Types
 export type AIProvider = "anthropic" | "openai" | "openrouter";
+
+// Decryption function for API keys stored in DB
+function decryptApiKey(encrypted: string | null): string | null {
+  if (!encrypted) return null;
+  try {
+    const decoded = Buffer.from(encrypted, "base64").toString("utf-8");
+    const parts = decoded.split(":");
+    return parts.slice(1).join(":");
+  } catch {
+    return null;
+  }
+}
 export type TaskType = "summary" | "reply" | "categorize" | "sentiment" | "other";
 
 export interface AIMessage {
@@ -181,15 +193,16 @@ function isProviderEnabled(settings: Awaited<ReturnType<typeof getAISettings>>, 
 
 /**
  * Get API key for a specific provider (from DB or env)
+ * DB keys are encrypted, so we need to decrypt them first
  */
 function getApiKey(settings: Awaited<ReturnType<typeof getAISettings>>, provider: AIProvider): string | null {
   switch (provider) {
     case "anthropic":
-      return settings.anthropicApiKey || process.env.ANTHROPIC_API_KEY || null;
+      return decryptApiKey(settings.anthropicApiKey) || process.env.ANTHROPIC_API_KEY || null;
     case "openai":
-      return settings.openaiApiKey || process.env.OPENAI_API_KEY || null;
+      return decryptApiKey(settings.openaiApiKey) || process.env.OPENAI_API_KEY || null;
     case "openrouter":
-      return settings.openrouterApiKey || process.env.OPENROUTER_API_KEY || null;
+      return decryptApiKey(settings.openrouterApiKey) || process.env.OPENROUTER_API_KEY || null;
     default:
       return null;
   }
