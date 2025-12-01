@@ -24,11 +24,22 @@ export async function POST(request: NextRequest) {
     const contentType = request.headers.get("content-type") || "";
     let emailData: InboundEmail;
 
+    console.log("[Email Webhook] Received request with content-type:", contentType);
+
     if (contentType.includes("application/json")) {
       emailData = await request.json();
-    } else if (contentType.includes("multipart/form-data")) {
-      // Handle form data (common for email webhooks)
+      console.log("[Email Webhook] Parsed as JSON");
+    } else if (contentType.includes("multipart/form-data") || contentType.includes("application/x-www-form-urlencoded")) {
+      // Handle form data (common for email webhooks like Mailgun)
       const formData = await request.formData();
+
+      // Log all form fields for debugging
+      const formFields: Record<string, string> = {};
+      formData.forEach((value, key) => {
+        formFields[key] = typeof value === 'string' ? value.substring(0, 100) : '[File]';
+      });
+      console.log("[Email Webhook] Form fields received:", Object.keys(formFields).join(", "));
+
       emailData = {
         from: formData.get("from") as string || formData.get("sender") as string || "",
         fromName: formData.get("from_name") as string || undefined,
@@ -37,9 +48,26 @@ export async function POST(request: NextRequest) {
         text: formData.get("text") as string || formData.get("body-plain") as string || undefined,
         html: formData.get("html") as string || formData.get("body-html") as string || undefined,
       };
+      console.log("[Email Webhook] Parsed form data - from:", emailData.from, "subject:", emailData.subject);
     } else {
-      // Try to parse as JSON anyway
-      emailData = await request.json();
+      // Try to parse as form data first (Mailgun default), then JSON
+      console.log("[Email Webhook] Unknown content-type, trying form data first");
+      try {
+        const formData = await request.formData();
+        emailData = {
+          from: formData.get("from") as string || formData.get("sender") as string || "",
+          fromName: formData.get("from_name") as string || undefined,
+          to: formData.get("to") as string || formData.get("recipient") as string || "",
+          subject: formData.get("subject") as string || "",
+          text: formData.get("text") as string || formData.get("body-plain") as string || undefined,
+          html: formData.get("html") as string || formData.get("body-html") as string || undefined,
+        };
+        console.log("[Email Webhook] Successfully parsed as form data");
+      } catch {
+        // If form data parsing fails, try JSON
+        console.log("[Email Webhook] Form data failed, trying JSON");
+        emailData = await request.json();
+      }
     }
 
     // Validate required fields
