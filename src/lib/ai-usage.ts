@@ -6,15 +6,49 @@ const PRICING = {
     "claude-3-5-haiku-20241022": { input: 1.00, output: 5.00 },
     "claude-3-5-sonnet-20241022": { input: 3.00, output: 15.00 },
     "claude-3-opus-20240229": { input: 15.00, output: 75.00 },
-    // Defaults for unknown models
     default: { input: 1.00, output: 5.00 },
   },
   openai: {
     "gpt-4o-mini": { input: 0.15, output: 0.60 },
     "gpt-4o": { input: 2.50, output: 10.00 },
     "gpt-4-turbo": { input: 10.00, output: 30.00 },
-    // Defaults for unknown models
     default: { input: 0.15, output: 0.60 },
+  },
+  openrouter: {
+    // Free models
+    "meta-llama/llama-3.1-8b-instruct:free": { input: 0, output: 0 },
+    "meta-llama/llama-3.2-3b-instruct:free": { input: 0, output: 0 },
+    "mistralai/mistral-7b-instruct:free": { input: 0, output: 0 },
+    "google/gemma-2-9b-it:free": { input: 0, output: 0 },
+    // Paid models via OpenRouter
+    "openai/gpt-4o": { input: 2.50, output: 10.00 },
+    "openai/gpt-4o-mini": { input: 0.15, output: 0.60 },
+    "anthropic/claude-3-haiku": { input: 0.25, output: 1.25 },
+    "anthropic/claude-3-sonnet": { input: 3.00, output: 15.00 },
+    "meta-llama/llama-3.1-70b-instruct": { input: 0.52, output: 0.75 },
+    default: { input: 0.50, output: 1.00 },
+  },
+} as const;
+
+// Provider display info
+export const PROVIDER_INFO = {
+  anthropic: {
+    name: "Anthropic",
+    color: "orange",
+    icon: "sparkles",
+    description: "Claude AI models",
+  },
+  openai: {
+    name: "OpenAI",
+    color: "green",
+    icon: "cpu",
+    description: "GPT models",
+  },
+  openrouter: {
+    name: "OpenRouter",
+    color: "purple",
+    icon: "globe",
+    description: "Multi-model gateway",
   },
 } as const;
 
@@ -108,11 +142,25 @@ export interface FeatureUsage {
   cost: number;
 }
 
+export interface ProviderStats {
+  provider: string;
+  totalRequests: number;
+  totalTokens: number;
+  totalCost: number;
+  inputTokens: number;
+  outputTokens: number;
+  successRate: number;
+  avgResponseTime: number;
+  models: ModelUsage[];
+  dailyUsage: DailyUsage[];
+}
+
 export async function getUsageStats(days: number = 30): Promise<{
   stats: UsageStats;
   dailyUsage: DailyUsage[];
   modelUsage: ModelUsage[];
   featureUsage: FeatureUsage[];
+  providerStats: ProviderStats[];
   recentUsage: Array<{
     id: string;
     provider: string;
@@ -197,7 +245,65 @@ export async function getUsageStats(days: number = 30): Promise<{
     createdAt: r.createdAt,
   }));
 
-  return { stats, dailyUsage, modelUsage, featureUsage, recentUsage };
+  // Group by provider (for tabs)
+  const providerMap = new Map<string, {
+    records: typeof usageRecords;
+    dailyMap: Map<string, DailyUsage>;
+    modelMap: Map<string, ModelUsage>;
+  }>();
+
+  // Initialize all providers
+  ["anthropic", "openai", "openrouter"].forEach(p => {
+    providerMap.set(p, {
+      records: [],
+      dailyMap: new Map(),
+      modelMap: new Map(),
+    });
+  });
+
+  usageRecords.forEach((r) => {
+    const providerData = providerMap.get(r.provider);
+    if (providerData) {
+      providerData.records.push(r);
+
+      // Daily usage per provider
+      const date = r.createdAt.toISOString().split("T")[0];
+      const existingDaily = providerData.dailyMap.get(date) || { date, requests: 0, tokens: 0, cost: 0 };
+      existingDaily.requests += 1;
+      existingDaily.tokens += r.totalTokens;
+      existingDaily.cost += r.totalCost;
+      providerData.dailyMap.set(date, existingDaily);
+
+      // Model usage per provider
+      const existingModel = providerData.modelMap.get(r.model) || { model: r.model, provider: r.provider, requests: 0, tokens: 0, cost: 0 };
+      existingModel.requests += 1;
+      existingModel.tokens += r.totalTokens;
+      existingModel.cost += r.totalCost;
+      providerData.modelMap.set(r.model, existingModel);
+    }
+  });
+
+  const providerStats: ProviderStats[] = Array.from(providerMap.entries()).map(([provider, data]) => {
+    const records = data.records;
+    const recordsWithResponseTime = records.filter(r => r.responseTime);
+
+    return {
+      provider,
+      totalRequests: records.length,
+      totalTokens: records.reduce((sum, r) => sum + r.totalTokens, 0),
+      totalCost: records.reduce((sum, r) => sum + r.totalCost, 0),
+      inputTokens: records.reduce((sum, r) => sum + r.inputTokens, 0),
+      outputTokens: records.reduce((sum, r) => sum + r.outputTokens, 0),
+      successRate: records.length > 0 ? 100 : 0, // We only log successful requests
+      avgResponseTime: recordsWithResponseTime.length > 0
+        ? recordsWithResponseTime.reduce((sum, r) => sum + (r.responseTime || 0), 0) / recordsWithResponseTime.length
+        : 0,
+      models: Array.from(data.modelMap.values()).sort((a, b) => b.cost - a.cost),
+      dailyUsage: Array.from(data.dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date)),
+    };
+  }).sort((a, b) => b.totalCost - a.totalCost);
+
+  return { stats, dailyUsage, modelUsage, featureUsage, providerStats, recentUsage };
 }
 
 // Format cost for display
