@@ -246,8 +246,9 @@ export async function POST(request: NextRequest) {
     });
 
     // Build message history for AI
+    // Note: DB stores roles as uppercase (USER, ASSISTANT), but AI APIs require lowercase
     const messageHistory: ChatMessage[] = conversation.messages.map((m) => ({
-      role: m.role as "user" | "assistant",
+      role: m.role.toLowerCase() as "user" | "assistant",
       content: m.content,
     }));
 
