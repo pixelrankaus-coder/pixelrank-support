@@ -1,6 +1,7 @@
 import { formatDate, cn } from "@/lib/utils";
 import { UserCircleIcon } from "@heroicons/react/24/solid";
 import { DocumentIcon, PhotoIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
+import { SafeHtml } from "@/components/safe-html";
 
 interface Attachment {
   id: string;
@@ -110,9 +111,9 @@ function MessageCard({ message }: { message: Message }) {
 
       {/* Message body */}
       <div className="px-4 py-4">
-        <div
+        <SafeHtml
+          html={message.body}
           className="text-gray-700 leading-relaxed prose prose-sm max-w-none"
-          dangerouslySetInnerHTML={{ __html: message.body }}
         />
 
         {/* Attachments */}
@@ -185,9 +186,9 @@ export function TicketConversation({
             <span className="text-sm text-gray-500">{formatDate(createdAt)}</span>
           </div>
           <div className="px-4 py-4">
-            <div
+            <SafeHtml
+              html={description}
               className="text-gray-700 leading-relaxed prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: description }}
             />
           </div>
         </div>
