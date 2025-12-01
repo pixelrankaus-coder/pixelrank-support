@@ -185,9 +185,10 @@ export function TicketConversation({
             <span className="text-sm text-gray-500">{formatDate(createdAt)}</span>
           </div>
           <div className="px-4 py-4">
-            <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-              {description}
-            </div>
+            <div
+              className="text-gray-700 leading-relaxed prose prose-sm max-w-none"
+              dangerouslySetInnerHTML={{ __html: description }}
+            />
           </div>
         </div>
       )}
