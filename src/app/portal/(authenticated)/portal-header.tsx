@@ -14,6 +14,7 @@ import {
   BookOpenIcon,
   Cog6ToothIcon,
 } from "@heroicons/react/24/outline";
+import { getInitials } from "@/lib/utils";
 
 interface User {
   id: string;
@@ -47,13 +48,6 @@ export function PortalHeader({ user }: { user: User }) {
     } finally {
       setIsLoggingOut(false);
     }
-  };
-
-  const getInitials = (name: string | null, email: string) => {
-    if (name) {
-      return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
-    }
-    return email[0].toUpperCase();
   };
 
   return (
@@ -93,7 +87,7 @@ export function PortalHeader({ user }: { user: User }) {
               className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <div className="w-9 h-9 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium text-sm">
-                {getInitials(user.name, user.email)}
+                {getInitials(user.name || user.email)}
               </div>
               <div className="hidden md:block text-left">
                 <p className="text-sm font-medium text-gray-700 max-w-[120px] truncate">
@@ -112,7 +106,7 @@ export function PortalHeader({ user }: { user: User }) {
                   <div className="p-4 bg-gradient-to-br from-blue-50 to-purple-50 border-b">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium">
-                        {getInitials(user.name, user.email)}
+                        {getInitials(user.name || user.email)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-900 truncate">
@@ -194,7 +188,7 @@ export function PortalHeader({ user }: { user: User }) {
             <div className="absolute bottom-0 left-0 right-0 p-4 border-t bg-gray-50">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center text-white font-medium">
-                  {getInitials(user.name, user.email)}
+                  {getInitials(user.name || user.email)}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">

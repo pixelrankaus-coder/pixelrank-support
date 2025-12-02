@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { EnvelopeIcon } from "@heroicons/react/24/outline";
 import { ChevronDownIcon } from "@heroicons/react/24/solid";
+import { getInitials } from "@/lib/utils";
 
 interface TicketCardProps {
   ticket: {
@@ -60,10 +61,6 @@ function getAvatarColor(name: string): string {
   return avatarColors[index];
 }
 
-function getInitial(name: string | null, email: string): string {
-  if (name) return name.charAt(0).toUpperCase();
-  return email.charAt(0).toUpperCase();
-}
 
 function getRelativeTime(date: Date): string {
   const now = new Date();
@@ -100,7 +97,7 @@ export function TicketCard({
   const contactName = ticket.contact?.name || ticket.contact?.email || "Unknown";
   const companyName = ticket.contact?.companyRef?.name;
   const avatarColor = getAvatarColor(contactName);
-  const initial = getInitial(ticket.contact?.name || null, ticket.contact?.email || "U");
+  const initials = getInitials(ticket.contact?.name || ticket.contact?.email || "U");
   const isNew = isNewTicket(ticket.createdAt);
 
   const currentPriority = priorityOptions.find((p) => p.value === ticket.priority);
@@ -127,7 +124,7 @@ export function TicketCard({
         <div
           className={`w-10 h-10 rounded-full ${avatarColor} flex items-center justify-center text-white font-medium text-sm flex-shrink-0`}
         >
-          {initial}
+          {initials}
         </div>
 
         {/* Main content */}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { EyeIcon } from "@heroicons/react/24/outline";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 
 interface Viewer {
   userId: string;
@@ -171,7 +171,7 @@ export function PresenceIndicator({
               viewer.isTyping ? "(typing...)" : "(viewing)"
             }`}
           >
-            {(viewer.userName || "A").charAt(0).toUpperCase()}
+            {getInitials(viewer.userName || "Agent")}
           </div>
         ))}
         {otherViewers.length > 3 && (

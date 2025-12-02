@@ -3,8 +3,8 @@
 import { ProfileDropdown } from "./profile-dropdown";
 import { NotificationBell } from "./notification-bell";
 import { GlobalSearch } from "./global-search";
-import { MagnifyingGlassIcon, PlusIcon } from "@heroicons/react/24/outline";
-import { useState } from "react";
+import { MagnifyingGlassIcon, ChevronDownIcon } from "@heroicons/react/24/outline";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 
 interface TopHeaderProps {
@@ -16,8 +16,27 @@ interface TopHeaderProps {
   };
 }
 
+const createMenuItems = [
+  { label: "Ticket", href: "/tickets/new" },
+  { label: "Article", href: "/admin/knowledge-base/articles?new=true" },
+  { label: "Activity", href: "/tasks?new=true" },
+];
+
 export function TopHeader({ user }: TopHeaderProps) {
   const [searchOpen, setSearchOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const createMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close create menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (createMenuRef.current && !createMenuRef.current.contains(event.target as Node)) {
+        setCreateMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   return (
     <>
@@ -29,15 +48,30 @@ export function TopHeader({ user }: TopHeaderProps) {
 
         {/* Right side - Actions */}
         <div className="flex items-center gap-1">
-          {/* New button */}
-          <div className="relative group">
-            <Link
-              href="/tickets/new"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors"
+          {/* Create dropdown button */}
+          <div className="relative" ref={createMenuRef}>
+            <button
+              onClick={() => setCreateMenuOpen(!createMenuOpen)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-[#14b8a6] rounded hover:bg-[#0d9488] transition-colors"
             >
-              <PlusIcon className="w-4 h-4" />
-              New
-            </Link>
+              Create
+              <ChevronDownIcon className="w-4 h-4" />
+            </button>
+
+            {createMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[140px] z-50">
+                {createMenuItems.map((item) => (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    onClick={() => setCreateMenuOpen(false)}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Search button */}

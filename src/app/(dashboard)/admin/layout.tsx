@@ -12,6 +12,7 @@ import {
   SparklesIcon,
   ChartBarIcon,
   ClipboardDocumentCheckIcon,
+  MegaphoneIcon,
 } from "@heroicons/react/24/outline";
 
 const sidebarSections = [
@@ -62,6 +63,12 @@ const sidebarSections = [
     icon: ClipboardDocumentCheckIcon,
     description: "Review and approve Claude AI agent actions",
     href: "/admin/ai-actions",
+  },
+  {
+    name: "Top Banner",
+    icon: MegaphoneIcon,
+    description: "Configure the announcement banner for all users",
+    href: "/admin/top-banner",
   },
   {
     name: "Support Operations",

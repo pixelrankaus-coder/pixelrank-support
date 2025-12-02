@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
+import { useBanner } from "@/components/banner-provider";
 import {
   Squares2X2Icon,
   TicketIcon,
@@ -15,6 +16,10 @@ import {
   FolderIcon,
   FireIcon,
 } from "@heroicons/react/24/outline";
+
+interface IconBarProps {
+  userName?: string | null;
+}
 
 interface SubMenuItem {
   name: string;
@@ -94,8 +99,9 @@ const bottomMenuItems: MenuItem[] = [
   },
 ];
 
-export function IconBar() {
+export function IconBar({ userName }: IconBarProps) {
   const pathname = usePathname();
+  const { isBannerVisible, bannerHeight } = useBanner();
   const [openSubmenu, setOpenSubmenu] = useState<string | null>(null);
   const submenuRef = useRef<HTMLDivElement>(null);
   const submenuTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -159,15 +165,15 @@ export function IconBar() {
         className={cn(
           "w-12 h-12 rounded-lg flex items-center justify-center transition-colors relative",
           isActive
-            ? "bg-slate-700 text-white"
+            ? "bg-slate-600 text-white"
             : "text-slate-400 hover:bg-slate-800 hover:text-white",
           hasSubmenu && "cursor-pointer"
         )}
       >
-        <item.icon className="w-6 h-6" />
+        <item.icon className={cn("w-6 h-6", isActive && "text-white")} />
         {/* Active indicator */}
         {isActive && (
-          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-blue-500 rounded-r" />
+          <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white rounded-r" />
         )}
       </div>
     );
@@ -250,7 +256,10 @@ export function IconBar() {
   };
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-16 bg-slate-900 flex flex-col z-50">
+    <aside
+      className="fixed left-0 bottom-0 w-16 bg-slate-900 flex flex-col z-50"
+      style={{ top: isBannerVisible ? bannerHeight : 0 }}
+    >
       {/* Logo */}
       <div className="h-16 flex items-center justify-center border-b border-slate-700">
         <Link
@@ -272,8 +281,8 @@ export function IconBar() {
         {bottomMenuItems.map(renderMenuItem)}
 
         {/* User avatar */}
-        <div className="mt-2 w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center text-slate-300 text-sm cursor-pointer hover:bg-slate-600 transition-colors">
-          A
+        <div className="mt-2 w-10 h-10 bg-slate-700 rounded-full flex items-center justify-center text-slate-300 text-xs font-medium cursor-pointer hover:bg-slate-600 transition-colors">
+          {getInitials(userName)}
         </div>
       </div>
     </aside>

@@ -1,4 +1,4 @@
-import { formatDate, cn } from "@/lib/utils";
+import { formatDate, cn, getInitials } from "@/lib/utils";
 import { UserCircleIcon } from "@heroicons/react/24/solid";
 import { DocumentIcon, PhotoIcon, ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import { SafeHtml } from "@/components/safe-html";
@@ -57,15 +57,15 @@ function MessageCard({ message }: { message: Message }) {
       className={cn(
         "rounded-lg border",
         message.internal
-          ? "bg-yellow-50 border-yellow-200"
-          : "bg-white border-gray-200"
+          ? "bg-[#fef9c3] border-[#fde047]"
+          : "bg-white border-[#eaecf0]"
       )}
     >
       {/* Message header */}
       <div
         className={cn(
           "px-4 py-3 border-b flex items-center justify-between",
-          message.internal ? "border-yellow-200 bg-yellow-100/50" : "border-gray-100 bg-gray-50"
+          message.internal ? "border-[#fde047] bg-[#fef9c3]" : "border-[#eaecf0] bg-[#f9fafb]"
         )}
       >
         <div className="flex items-center gap-3">
@@ -79,41 +79,41 @@ function MessageCard({ message }: { message: Message }) {
             <div
               className={cn(
                 "w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium",
-                isAgent ? "bg-blue-500" : isContact ? "bg-green-500" : "bg-gray-400"
+                isAgent ? "bg-[#7e56d8]" : isContact ? "bg-[#16a34a]" : "bg-[#667085]"
               )}
             >
-              {authorName.charAt(0).toUpperCase()}
+              {getInitials(authorName)}
             </div>
           )}
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-medium text-gray-900">{authorName}</span>
+              <span className="font-medium text-[#101828]">{authorName}</span>
               <span
                 className={cn(
                   "px-2 py-0.5 text-xs font-medium rounded",
-                  isAgent && "bg-blue-100 text-blue-700",
-                  isContact && "bg-green-100 text-green-700",
-                  message.authorType === "SYSTEM" && "bg-gray-100 text-gray-700"
+                  isAgent && "bg-[#f9f5ff] text-[#7e56d8]",
+                  isContact && "bg-[#dcfce7] text-[#16a34a]",
+                  message.authorType === "SYSTEM" && "bg-[#f2f4f7] text-[#667085]"
                 )}
               >
                 {message.authorType}
               </span>
               {message.internal && (
-                <span className="px-2 py-0.5 text-xs font-medium rounded bg-yellow-200 text-yellow-800">
+                <span className="px-2 py-0.5 text-xs font-medium rounded bg-[#fde047] text-[#854d0e]">
                   Internal Note
                 </span>
               )}
             </div>
           </div>
         </div>
-        <span className="text-sm text-gray-500">{formatDate(message.createdAt)}</span>
+        <span className="text-sm text-[#667085]">{formatDate(message.createdAt)}</span>
       </div>
 
       {/* Message body */}
       <div className="px-4 py-4">
         <SafeHtml
           html={message.body}
-          className="text-gray-700 leading-relaxed prose prose-sm max-w-none"
+          className="text-[#344054] leading-relaxed prose prose-sm max-w-none"
         />
 
         {/* Attachments */}
@@ -163,32 +163,32 @@ export function TicketConversation({
     <div className="space-y-4">
       {/* Original ticket description */}
       {hasDescription && (
-        <div className="rounded-lg border border-gray-200 bg-white">
-          <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+        <div className="rounded-lg border border-[#eaecf0] bg-white">
+          <div className="px-4 py-3 border-b border-[#eaecf0] bg-[#f9fafb] flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-green-500 flex items-center justify-center text-white text-sm font-medium">
-                {(contactName || "C").charAt(0).toUpperCase()}
+              <div className="w-8 h-8 rounded-full bg-[#16a34a] flex items-center justify-center text-white text-sm font-medium">
+                {getInitials(contactName || "Customer")}
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-[#101828]">
                     {contactName || "Customer"}
                   </span>
-                  <span className="px-2 py-0.5 text-xs font-medium rounded bg-green-100 text-green-700">
+                  <span className="px-2 py-0.5 text-xs font-medium rounded bg-[#dcfce7] text-[#16a34a]">
                     CONTACT
                   </span>
-                  <span className="px-2 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-700">
+                  <span className="px-2 py-0.5 text-xs font-medium rounded bg-[#f9f5ff] text-[#7e56d8]">
                     Original Request
                   </span>
                 </div>
               </div>
             </div>
-            <span className="text-sm text-gray-500">{formatDate(createdAt)}</span>
+            <span className="text-sm text-[#667085]">{formatDate(createdAt)}</span>
           </div>
           <div className="px-4 py-4">
             <SafeHtml
               html={description}
-              className="text-gray-700 leading-relaxed prose prose-sm max-w-none"
+              className="text-[#344054] leading-relaxed prose prose-sm max-w-none"
             />
           </div>
         </div>

@@ -20,6 +20,7 @@ import {
   PlusIcon,
   XMarkIcon,
 } from "@heroicons/react/24/outline";
+import { getInitials } from "@/lib/utils";
 import { CheckCircleIcon as CheckCircleSolidIcon } from "@heroicons/react/24/solid";
 import { TimeTracking } from "@/components/tasks/time-tracking";
 
@@ -283,13 +284,7 @@ export function TaskDetailClient({
     return new Date(date) < new Date() && task.status !== "DONE";
   };
 
-  const getInitials = (name: string | null, email: string) => {
-    if (name) {
-      return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
-    }
-    return email[0].toUpperCase();
-  };
-
+  
   return (
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
@@ -575,7 +570,7 @@ export function TaskDetailClient({
             <form onSubmit={handleAddNote} className="p-4 border-b bg-gray-50">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 text-xs font-medium flex-shrink-0">
-                  {getInitials(null, currentUserId)}
+                  {getInitials(currentUserId)}
                 </div>
                 <div className="flex-1">
                   <textarea
@@ -611,7 +606,7 @@ export function TaskDetailClient({
                   <div key={note.id} className="p-4">
                     <div className="flex items-start gap-3">
                       <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 text-xs font-medium flex-shrink-0">
-                        {getInitials(note.author.name, note.author.email)}
+                        {getInitials(note.author.name || note.author.email)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">

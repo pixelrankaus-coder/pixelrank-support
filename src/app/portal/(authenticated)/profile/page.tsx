@@ -9,6 +9,7 @@ import {
   CheckCircleIcon,
   ExclamationCircleIcon,
 } from "@heroicons/react/24/outline";
+import { getInitials } from "@/lib/utils";
 
 interface Profile {
   id: string;
@@ -124,13 +125,6 @@ export default function ProfilePage() {
     }
   };
 
-  const getInitials = (name: string | null, email: string) => {
-    if (name) {
-      return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
-    }
-    return email[0].toUpperCase();
-  };
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -158,7 +152,7 @@ export default function ProfilePage() {
       <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl p-6 mb-6 text-white">
         <div className="flex items-center gap-4">
           <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-2xl font-bold">
-            {getInitials(profile.name, profile.email)}
+            {getInitials(profile.name || profile.email)}
           </div>
           <div>
             <h2 className="text-xl font-semibold">{profile.name || "Customer"}</h2>

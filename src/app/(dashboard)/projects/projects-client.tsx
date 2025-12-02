@@ -21,6 +21,7 @@ import {
   ExclamationTriangleIcon,
   ExclamationCircleIcon,
 } from "@heroicons/react/24/outline";
+import { getInitials } from "@/lib/utils";
 
 interface TeamMember {
   id: string;
@@ -491,7 +492,7 @@ export function ProjectsClient({
                               />
                             ) : (
                               <div className="w-7 h-7 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-600">
-                                {(member.name || member.email).charAt(0).toUpperCase()}
+                                {getInitials(member.name || member.email)}
                               </div>
                             )}
                           </div>
@@ -623,7 +624,7 @@ export function ProjectsClient({
                               />
                             ) : (
                               <div className="w-7 h-7 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-600">
-                                {(member.name || member.email).charAt(0).toUpperCase()}
+                                {getInitials(member.name || member.email)}
                               </div>
                             )}
                           </div>

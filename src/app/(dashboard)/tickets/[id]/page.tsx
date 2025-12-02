@@ -19,7 +19,13 @@ export default async function TicketDetailPage({ params }: PageProps) {
     prisma.ticket.findUnique({
       where: { id },
       include: {
-        contact: true,
+        contact: {
+          include: {
+            companyRef: {
+              select: { name: true, timezone: true },
+            },
+          },
+        },
         assignee: true,
         createdBy: true,
         group: true,

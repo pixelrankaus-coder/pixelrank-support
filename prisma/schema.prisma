@@ -96,6 +96,7 @@ model Company {
   id        String   @id @default(cuid())
   name      String
   website   String?
+  timezone  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @default(now()) @updatedAt
 
@@ -1053,6 +1054,20 @@ model ChatConversation {
   @@index([type])
   @@index([status])
   @@index([createdAt])
+}
+
+// Top Banner Settings - Admin configurable announcement banner
+model TopBanner {
+  id              String   @id @default("default")
+  isEnabled       Boolean  @default(false)
+  message         String   @db.Text
+  linkText        String?
+  linkUrl         String?
+  backgroundColor String   @default("#EFF6FF")
+  textColor       String   @default("#344054")
+  dismissible     Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 }
 
 // Chat Messages within a conversation

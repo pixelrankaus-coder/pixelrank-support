@@ -8,6 +8,7 @@ import {
   ArrowRightOnRectangleIcon,
   UserCircleIcon,
 } from "@heroicons/react/24/outline";
+import { getInitials } from "@/lib/utils";
 
 interface ProfileDropdownProps {
   user: {
@@ -52,7 +53,7 @@ export function ProfileDropdown({ user }: ProfileDropdownProps) {
           />
         ) : (
           <div className="w-full h-full bg-orange-500 flex items-center justify-center text-white font-medium text-sm">
-            {(user.name || user.email).charAt(0).toUpperCase()}
+            {getInitials(user.name || user.email)}
           </div>
         )}
       </button>
@@ -71,7 +72,7 @@ export function ProfileDropdown({ user }: ProfileDropdownProps) {
                 />
               ) : (
                 <div className="w-10 h-10 rounded-full bg-orange-500 flex items-center justify-center text-white font-medium">
-                  {(user.name || user.email).charAt(0).toUpperCase()}
+                  {getInitials(user.name || user.email)}
                 </div>
               )}
               <div className="flex-1 min-w-0">
