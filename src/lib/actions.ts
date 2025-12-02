@@ -110,6 +110,7 @@ export async function updateTicket(
     status?: string;
     priority?: string;
     assigneeId?: string | null;
+    contactId?: string | null;
   }
 ) {
   const session = await auth();
@@ -124,7 +125,8 @@ export async function updateTicket(
       status: true,
       priority: true,
       assigneeId: true,
-      groupId: true
+      groupId: true,
+      contactId: true
     },
   });
 

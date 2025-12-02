@@ -15,7 +15,7 @@ export default async function TicketDetailPage({ params }: PageProps) {
   const { id } = await params;
   const session = await auth();
 
-  const [ticket, agents, currentAgent, groups, availableTags] = await Promise.all([
+  const [ticket, agents, currentAgent, groups, availableTags, allContacts] = await Promise.all([
     prisma.ticket.findUnique({
       where: { id },
       include: {
@@ -68,6 +68,11 @@ export default async function TicketDetailPage({ params }: PageProps) {
       select: { id: true, name: true, color: true },
       orderBy: { name: "asc" },
     }),
+    prisma.contact.findMany({
+      select: { id: true, name: true, email: true },
+      orderBy: [{ name: "asc" }, { email: "asc" }],
+      take: 500,
+    }),
   ]);
 
   if (!ticket) {
@@ -88,6 +93,7 @@ export default async function TicketDetailPage({ params }: PageProps) {
       contactTickets={contactTickets}
       userId={session!.user.id}
       currentAgent={currentAgent}
+      allContacts={allContacts}
     />
   );
 }

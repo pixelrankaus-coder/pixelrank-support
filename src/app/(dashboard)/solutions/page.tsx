@@ -1,14 +1,18 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { getRecentChanges } from "@/lib/changelog-parser";
 import {
   BookOpenIcon,
   DocumentTextIcon,
   EyeIcon,
   PencilIcon,
   ArrowTopRightOnSquareIcon,
+  SparklesIcon,
 } from "@heroicons/react/24/outline";
 
 export default async function SolutionsPage() {
+  const recentChanges = getRecentChanges(3);
+
   const [categories, recentArticles, stats] = await Promise.all([
     prisma.kBCategory.findMany({
       orderBy: { name: "asc" },
@@ -206,6 +210,78 @@ export default async function SolutionsPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Release Notes */}
+      <div className="mt-6 bg-white rounded-lg border">
+        <div className="p-4 border-b flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <SparklesIcon className="w-5 h-5 text-purple-600" />
+            <h2 className="font-semibold text-gray-900">Release Notes</h2>
+          </div>
+          <Link
+            href="/admin/release-notes"
+            className="text-sm text-blue-600 hover:text-blue-800"
+          >
+            View all
+          </Link>
+        </div>
+        {recentChanges.length === 0 ? (
+          <div className="p-8 text-center">
+            <SparklesIcon className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 text-sm">No release notes yet</p>
+          </div>
+        ) : (
+          <div className="divide-y">
+            {recentChanges.map((entry) => (
+              <div key={entry.date} className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-medium text-gray-900">
+                    {new Date(entry.date).toLocaleDateString("en-US", {
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {entry.sections.slice(0, 2).map((section) => (
+                    <div key={section.title}>
+                      <span
+                        className={`inline-block px-2 py-0.5 text-xs rounded mr-2 ${
+                          section.title === "Added"
+                            ? "bg-green-100 text-green-800"
+                            : section.title === "Fixed"
+                            ? "bg-blue-100 text-blue-800"
+                            : section.title === "Changed"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {section.title}
+                      </span>
+                      <ul className="mt-1 space-y-0.5">
+                        {section.items.slice(0, 3).map((item, idx) => (
+                          <li
+                            key={idx}
+                            className="text-sm text-gray-600 pl-4 before:content-['•'] before:absolute before:left-0 relative"
+                          >
+                            {item}
+                          </li>
+                        ))}
+                        {section.items.length > 3 && (
+                          <li className="text-xs text-gray-400 pl-4">
+                            +{section.items.length - 3} more
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

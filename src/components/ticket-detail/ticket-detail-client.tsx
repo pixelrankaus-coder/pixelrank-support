@@ -15,6 +15,7 @@ import { CollisionWarning } from "./collision-warning";
 import { AIAssistPanel } from "./ai-assist-panel";
 import { AskClaudePanel } from "./ask-claude-panel";
 import { CreateTaskModal } from "./create-task-modal";
+import { AppSlotRenderer } from "@/components/apps/AppSlotRenderer";
 import { updateTicket, deleteTicket } from "@/lib/actions";
 
 function formatTimeAgo(date: Date): string {
@@ -130,6 +131,7 @@ interface TicketDetailClientProps {
     email: string;
     avatar?: string | null;
   } | null;
+  allContacts?: { id: string; name: string | null; email: string | null }[];
 }
 
 export function TicketDetailClient({
@@ -140,6 +142,7 @@ export function TicketDetailClient({
   contactTickets,
   userId,
   currentAgent,
+  allContacts = [],
 }: TicketDetailClientProps) {
   const router = useRouter();
   const composerRef = useRef<ReplyComposerRef>(null);
@@ -368,7 +371,7 @@ export function TicketDetailClient({
             {/* Sidebar Content */}
             <div className="p-4 space-y-4">
               {/* Contact Card at top */}
-              <ContactCard contact={ticket.contact} />
+              <ContactCard contact={ticket.contact} ticketId={ticket.id} allContacts={allContacts} />
 
               {/* Properties Card */}
               <PropertiesCard
@@ -385,6 +388,9 @@ export function TicketDetailClient({
                   currentTicketId={ticket.id}
                 />
               )}
+
+              {/* App Slot for sidebar apps */}
+              <AppSlotRenderer slot="ticket-detail-sidebar" className="mt-4" />
             </div>
           </div>
         )}

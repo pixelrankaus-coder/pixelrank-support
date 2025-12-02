@@ -7,6 +7,34 @@
 
 ## December 2025
 
+### 2025-12-03 | Hosting Architecture
+**Decision:** Supabase + Vercel instead of Digital Ocean
+**Reasoning:** Built-in auth, RLS for multi-tenant, real-time updates, cheaper, faster to ship
+**SaaS Impact:** ✅ Perfect for SaaS — RLS ready for tenant isolation
+
+---
+
+### 2025-12-03 | Multi-Instance Strategy
+**Decision:** Separate deployments per client (Pixel Rank, Cold Xpress)
+**Reasoning:** Faster iteration, easy customization per client
+**SaaS Impact:** ⚠️ Will consolidate to single multi-tenant app later
+
+---
+
+### 2025-12-03 | App Store Architecture
+**Decision:** Slot-based extensible app system with client-side registry
+**Reasoning:** Allows adding features as pluggable apps, enables per-tenant app installation, supports future marketplace
+**SaaS Impact:** ✅ Perfect for SaaS — each tenant can have different apps enabled
+
+---
+
+### 2025-12-03 | App Slot Locations
+**Decision:** 6 initial slots: ticket-detail-sidebar, ticket-toolbar, compose-toolbar, dashboard-widget, settings-menu, contact-sidebar
+**Reasoning:** Cover main extension points without over-engineering; easy to add more slots later
+**SaaS Impact:** ✅ None — slots are universal, apps are tenant-specific
+
+---
+
 ### 2025-12-02 | Design System Source
 **Decision:** Base design system on BoldDesk's UI patterns  
 **Reasoning:** Professional, proven ticket system UI. Clean, modern aesthetic.  
