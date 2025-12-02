@@ -4,6 +4,7 @@ import "./globals.css";
 
 // Register apps at startup
 import "@/apps/ai-assist";
+import "@/apps/demo-apps";
 
 const inter = Inter({ subsets: ["latin"] });
 

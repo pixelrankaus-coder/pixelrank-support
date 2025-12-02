@@ -40,6 +40,31 @@
   - useInstalledApps and useHasApp hooks
   - AI Assist app as first registered app (with panel and suggest reply button)
   - lucide-react package added for icons
+- **App Store API Endpoints** - Full app lifecycle management
+  - GET /api/apps - List all available apps with installation status
+  - GET /api/apps/installed - List installed apps only
+  - POST /api/apps/[appId] - Install an app
+  - DELETE /api/apps/[appId] - Uninstall an app
+  - PATCH /api/apps/[appId] - Update app config or enable/disable
+  - InstalledApp Prisma model for database persistence
+- **App Store UI** - Admin marketplace page at /admin/apps
+  - Browse available apps with category filtering
+  - Search apps by name or description
+  - Install/uninstall apps with one click
+  - Enable/disable installed apps
+  - View app details (slots, permissions, pricing)
+  - Category badges and pricing display
+- **Demo Apps** - 10 placeholder apps to showcase App Store
+  - Slack Integration (integrations)
+  - Time Tracker (productivity)
+  - CSAT Surveys (feedback)
+  - Ticket Insights (reporting)
+  - Knowledge Suggester (self-service)
+  - Custom Fields (customization)
+  - Auto Assign (productivity)
+  - SLA Monitor (reporting)
+  - Merge Tickets (productivity)
+  - Zendesk Importer (integrations)
 - **Release Notes on Solutions Page** - Agent-facing changelog
   - Changelog parser (`src/lib/changelog-parser.ts`) to read CHANGELOG.md
   - Release Notes section on /solutions page
@@ -58,9 +83,15 @@
 | `src/apps/ai-assist/index.ts` | AI Assist app registration |
 | `src/apps/ai-assist/components/AIAssistPanel.tsx` | Sidebar panel component |
 | `src/apps/ai-assist/components/SuggestReplyButton.tsx` | Compose toolbar button |
+| `src/apps/demo-apps/index.ts` | Demo apps for App Store showcase |
 | `src/components/apps/AppSlotRenderer.tsx` | Renders apps for a given slot |
-| `src/hooks/useInstalledApps.ts` | Fetch installed apps (mock data) |
+| `src/hooks/useInstalledApps.ts` | Fetch installed apps from API |
 | `src/hooks/useHasApp.ts` | Check if app is installed |
+| `src/app/api/apps/route.ts` | API: List all apps with status |
+| `src/app/api/apps/installed/route.ts` | API: List installed apps only |
+| `src/app/api/apps/[appId]/route.ts` | API: Install/uninstall/update apps |
+| `src/app/(dashboard)/admin/apps/page.tsx` | App Store marketplace UI |
+| `prisma/schema.prisma` | Added InstalledApp model |
 
 ---
 

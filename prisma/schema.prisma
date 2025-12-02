@@ -1097,3 +1097,26 @@ model ChatMessage {
   @@index([role])
   @@index([createdAt])
 }
+
+// Installed Apps - Track which apps are installed and their configuration
+model InstalledApp {
+  id          String   @id @default(cuid())
+
+  // App identifier from registry
+  appId       String   // Reference to app registry (e.g., "ai-assist")
+
+  // Installation status
+  isEnabled   Boolean  @default(true)
+
+  // App-specific configuration stored as JSON
+  config      String?  @db.Text // JSON config for the app
+
+  // Installation metadata
+  installedBy String?  // User ID who installed
+  installedAt DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Unique constraint - only one installation per app
+  @@unique([appId])
+  @@index([isEnabled])
+}
