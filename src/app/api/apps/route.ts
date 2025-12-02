@@ -48,6 +48,7 @@ export async function GET() {
       id: app.id,
       name: app.name,
       description: app.description,
+      longDescription: app.longDescription,
       icon: app.icon,
       version: app.version,
       category: app.category,
@@ -60,6 +61,23 @@ export async function GET() {
       config: installedMap.get(app.id)?.config
         ? JSON.parse(installedMap.get(app.id)!.config!)
         : {},
+      // Enhanced marketplace fields
+      screenshots: app.screenshots,
+      developer: app.developer,
+      reviewStats: app.reviewStats,
+      features: app.features,
+      requirements: app.requirements,
+      changelog: app.changelog,
+      tags: app.tags,
+      isFeatured: app.isFeatured,
+      isNew: app.isNew,
+      isPopular: app.isPopular,
+      isStaffPick: app.isStaffPick,
+      releaseDate: app.releaseDate,
+      lastUpdated: app.lastUpdated,
+      supportUrl: app.supportUrl,
+      documentationUrl: app.documentationUrl,
+      privacyPolicyUrl: app.privacyPolicyUrl,
     }));
 
     return NextResponse.json(appsWithStatus);

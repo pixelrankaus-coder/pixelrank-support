@@ -1120,3 +1120,35 @@ model InstalledApp {
   @@unique([appId])
   @@index([isEnabled])
 }
+
+// App Reviews - User reviews and ratings for marketplace apps
+model AppReview {
+  id          String   @id @default(cuid())
+
+  appId       String   // Reference to app registry ID
+
+  // Reviewer info
+  userId      String   // User who wrote the review
+  userName    String   // Cached name for display
+
+  // Review content
+  rating      Int      // 1-5 stars
+  title       String?  // Optional review title
+  content     String   @db.Text // Review text
+
+  // Helpful votes
+  helpfulCount    Int  @default(0)
+  notHelpfulCount Int  @default(0)
+
+  // Moderation
+  isVerified  Boolean  @default(false) // Verified purchase
+  isApproved  Boolean  @default(true)  // Moderation status
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([appId, userId]) // One review per user per app
+  @@index([appId])
+  @@index([rating])
+  @@index([createdAt])
+}
