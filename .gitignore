@@ -50,3 +50,6 @@ next-env.d.ts
 
 # Build artifacts
 nul
+
+.vercel
+.env*.local

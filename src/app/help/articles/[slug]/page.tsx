@@ -4,6 +4,9 @@ import { prisma } from "@/lib/db";
 import { ChevronRightIcon } from "@heroicons/react/24/outline";
 import { ArticleFeedback } from "./article-feedback";
 
+// Force dynamic rendering to prevent build-time database queries
+export const dynamic = "force-dynamic";
+
 export default async function ArticlePage({
   params,
 }: {

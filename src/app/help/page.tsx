@@ -2,6 +2,9 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { MagnifyingGlassIcon, FolderIcon } from "@heroicons/react/24/outline";
 
+// Force dynamic rendering to prevent build-time database queries
+export const dynamic = "force-dynamic";
+
 export default async function HelpCenterPage() {
   const categories = await prisma.kBCategory.findMany({
     where: {

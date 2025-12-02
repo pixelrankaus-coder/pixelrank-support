@@ -7,6 +7,9 @@ import {
   ChevronRightIcon,
 } from "@heroicons/react/24/outline";
 
+// Force dynamic rendering to prevent build-time database queries
+export const dynamic = "force-dynamic";
+
 export default async function CategoryPage({
   params,
 }: {
