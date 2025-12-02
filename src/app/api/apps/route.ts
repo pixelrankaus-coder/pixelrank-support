@@ -4,6 +4,11 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/db';
 import { getAllApps } from '@/lib/app-registry';
 
+// Register apps for API routes
+import '@/apps/ai-assist';
+import '@/apps/demo-apps';
+import '@/apps/quick-notes';
+
 // GET /api/apps - List all available apps with installation status
 export async function GET() {
   try {
